@@ -30,7 +30,7 @@ async def filter_table(state:DataAgentState,runtime:Runtime[DataAgentContext]):
                 table_info["columns"]=[column_info for column_info in table_info["columns"] if column_info["name"] in result[table_info["name"]]]
                 filtered_table_infos.append(table_info)
 
-        logger.info(f"过滤后的表信息:{[filtered_table_info["name"] for filtered_table_info in filtered_table_infos]}")
+        logger.info(f"过滤后的表信息:{[item['name'] for item in filtered_table_infos]}")
         writer({"type": "progress", "step": "过滤表格", "status": "success"})
         return {"table_infos":filtered_table_infos}
     except Exception as e:

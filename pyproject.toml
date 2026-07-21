@@ -13,6 +13,7 @@ dependencies = [
     "langchain-huggingface==1.2.0",
     "langchain-openai>=1.2.2",
     "langgraph>=1.2.4",
+    "mcp>=1.0.0",
     "loguru>=0.7.3",
     "omegaconf>=2.3.0",
     "pyyaml>=6.0.3",

@@ -1,15 +1,24 @@
-import asyncio
+from __future__ import annotations
 
-from langgraph.constants import START, END
+from langgraph.constants import END, START
 from langgraph.graph import StateGraph
+from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
-from app.agent.nodes.filter_metric import filter_metric
 from app.agent.nodes.add_extra_context import add_extra_context
 from app.agent.nodes.corrtect_sql import correct_sql
 from app.agent.nodes.extract_keywords import extract_keywords
+from app.agent.nodes.filter_metric import filter_metric
 from app.agent.nodes.filter_table import filter_table
 from app.agent.nodes.generate_sql import generate_sql
+from app.agent.nodes.intent import (
+    chat_node,
+    history_query_node,
+    intent_recognition,
+    security_node,
+    unsupported_intent,
+)
+from app.agent.nodes.memory import load_memory
 from app.agent.nodes.merge_retrieved_info import merge_retrieved_info
 from app.agent.nodes.recall_column import recall_column
 from app.agent.nodes.recall_metric import recall_metric
@@ -17,82 +26,97 @@ from app.agent.nodes.recall_value import recall_value
 from app.agent.nodes.run_sql import run_sql
 from app.agent.nodes.validate_sql import validate_sql
 from app.agent.state import DataAgentState
-from app.clients.embedding_client_manager import embedding_client_manager
-from app.clients.es_client_manager import es_client_manager
-from app.clients.mysql_client_manager import meta_mysql_client_manager, dw_mysql_client_manager
-from app.clients.qdrant_client_manager import qdrant_client_manger
-from app.repositories.es.value_es_repository import ValueESRepository
-from app.repositories.mysql.dw.dw_mysql_repository import DWMySQLRepository
-from app.repositories.mysql.meta.meta_mysql_repositoriy import MetaMySQLRepository
-from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantRepository
-from app.repositories.qdrant.metric_qdrant_repository import MetricQdrantRepository
-
-graph_builder=StateGraph(state_schema=DataAgentState,context_schema=DataAgentState)
-
-# 添加节点
-graph_builder.add_node("extract_keywords", extract_keywords)
-graph_builder.add_node("recall_column", recall_column)
-graph_builder.add_node("recall_value", recall_value)
-graph_builder.add_node("recall_metric", recall_metric)
-graph_builder.add_node("merge_retrieved_info", merge_retrieved_info)
-graph_builder.add_node("filter_metric", filter_metric)
-graph_builder.add_node("filter_table", filter_table)
-graph_builder.add_node("add_extra_context", add_extra_context)
-graph_builder.add_node("generate_sql", generate_sql)
-graph_builder.add_node("validate_sql", validate_sql)
-graph_builder.add_node("correct_sql", correct_sql)
-graph_builder.add_node("run_sql", run_sql)
-
-graph_builder.add_edge(START, "extract_keywords")
-graph_builder.add_edge("extract_keywords", "recall_column")
-graph_builder.add_edge("extract_keywords", "recall_value")
-graph_builder.add_edge("extract_keywords", "recall_metric")
-graph_builder.add_edge("recall_column", "merge_retrieved_info")
-graph_builder.add_edge("recall_value", "merge_retrieved_info")
-graph_builder.add_edge("recall_metric", "merge_retrieved_info")
-graph_builder.add_edge("merge_retrieved_info", "filter_metric")
-graph_builder.add_edge("merge_retrieved_info", "filter_table")
-graph_builder.add_edge("filter_metric", "add_extra_context")
-graph_builder.add_edge("filter_table", "add_extra_context")
-graph_builder.add_edge("add_extra_context", "generate_sql")
-graph_builder.add_edge("generate_sql", "validate_sql")
-
-graph_builder.add_conditional_edges("validate_sql",lambda state:"run_sql" if state["error"] is None else "correct_sql",
-                                    {"run_sql":"run_sql","correct_sql":"correct_sql"})
-
-graph_builder.add_edge("correct_sql", "run_sql")
-graph_builder.add_edge("run_sql", END)
-
-graph=graph_builder.compile()
-# print(graph.get_graph().draw_mermaid())
-
-if __name__ == '__main__':
-    async def test():
-        qdrant_client_manger.init()
-        embedding_client_manager.init()
-        es_client_manager.init()
-        meta_mysql_client_manager.init()
-        dw_mysql_client_manager.init()
-        async with meta_mysql_client_manager.session_factory() as meta_session,dw_mysql_client_manager.session_factory() as dw_session:
-            meta_mysql_repository=MetaMySQLRepository(meta_session)
-            colunmn_qdrant_repository=ColumnQdrantRepository(qdrant_client_manger.client)
-            metric_qdrant_repository=MetricQdrantRepository(qdrant_client_manger.client)
-            value_es_reporitory=ValueESRepository(es_client_manager.client)
-            dw_mysql_repository=DWMySQLRepository(dw_session)
+from app.tools.registry import ToolRegistry, ToolDefinition
 
 
-            state=DataAgentState(query="统计华北地区的销售总额")
-            context=DataAgentContext(column_qdrrant_repository=colunmn_qdrant_repository,
-                                     metric_qdrant_repository=metric_qdrant_repository,
-                                     value_es_repository=value_es_reporitory,
-                                     meta_mysql_repository=meta_mysql_repository,
-                                     embedding_client=embedding_client_manager.client,
-                                     dw_mysql_repository=dw_mysql_repository
-                                     )
-            async for chunk in graph.astream(input=state,context=context,stream_mode="custom"):
-                print(chunk)
-            await qdrant_client_manger.close()
-            await es_client_manager.close()
-            await meta_mysql_client_manager.close()
-    asyncio.run(test())
+def build_sql_graph():
+    builder = StateGraph(state_schema=DataAgentState, context_schema=DataAgentContext)
+    builder.add_node("extract_keywords", extract_keywords)
+    builder.add_node("recall_column", recall_column)
+    builder.add_node("recall_value", recall_value)
+    builder.add_node("recall_metric", recall_metric)
+    builder.add_node("merge_retrieved_info", merge_retrieved_info)
+    builder.add_node("filter_metric", filter_metric)
+    builder.add_node("filter_table", filter_table)
+    builder.add_node("add_extra_context", add_extra_context)
+    builder.add_node("generate_sql", generate_sql)
+    builder.add_node("validate_sql", validate_sql)
+    builder.add_node("correct_sql", correct_sql)
+    builder.add_node("run_sql", run_sql)
+    builder.add_edge(START, "extract_keywords")
+    builder.add_edge("extract_keywords", "recall_column")
+    builder.add_edge("extract_keywords", "recall_value")
+    builder.add_edge("extract_keywords", "recall_metric")
+    builder.add_edge("recall_column", "merge_retrieved_info")
+    builder.add_edge("recall_value", "merge_retrieved_info")
+    builder.add_edge("recall_metric", "merge_retrieved_info")
+    builder.add_edge("merge_retrieved_info", "filter_metric")
+    builder.add_edge("merge_retrieved_info", "filter_table")
+    builder.add_edge("filter_metric", "add_extra_context")
+    builder.add_edge("filter_table", "add_extra_context")
+    builder.add_edge("add_extra_context", "generate_sql")
+    builder.add_edge("generate_sql", "validate_sql")
+    builder.add_conditional_edges(
+        "validate_sql", lambda state: "run_sql" if state.get("error") is None else "correct_sql",
+        {"run_sql": "run_sql", "correct_sql": "correct_sql"},
+    )
+    builder.add_edge("correct_sql", "run_sql")
+    builder.add_edge("run_sql", END)
+    return builder.compile()
 
+
+sql_graph = build_sql_graph()
+tool_registry = ToolRegistry()
+tool_registry.register(ToolDefinition(
+    name="data.query",
+    description="Run a read-only natural language data query through the SQL agent subgraph.",
+    handler=None,
+    kind="graph",
+    allowed_intents={"text_to_sql", "schema_query"},
+))
+
+
+async def run_sql_subgraph(state: DataAgentState, runtime: Runtime[DataAgentContext]):
+    writer = runtime.stream_writer
+    tool = runtime.context["tool_registry"].get("data.query")
+    role = state.get("role", "user")
+    if role not in tool.allowed_roles or (tool.allowed_intents and state.get("intent") not in tool.allowed_intents):
+        raise PermissionError(f"Role {role!r} cannot use tool {tool.name!r}")
+    result_state = {}
+    async for chunk in sql_graph.astream(state, context=runtime.context, stream_mode="custom"):
+        writer(chunk)
+    result_state["response"] = "SQL 查询已完成，请查看上方结果。"
+    return result_state
+
+
+def route_by_intent(state: DataAgentState) -> str:
+    return state.get("intent", "unsupported")
+
+
+outer_builder = StateGraph(state_schema=DataAgentState, context_schema=DataAgentContext)
+outer_builder.add_node("load_memory", load_memory)
+outer_builder.add_node("intent_recognition", intent_recognition)
+outer_builder.add_node("run_sql_subgraph", run_sql_subgraph)
+outer_builder.add_node("chat", chat_node)
+outer_builder.add_node("history_query", history_query_node)
+outer_builder.add_node("security", security_node)
+outer_builder.add_node("unsupported_intent", unsupported_intent)
+outer_builder.add_edge(START, "load_memory")
+outer_builder.add_edge("load_memory", "intent_recognition")
+outer_builder.add_conditional_edges(
+    "intent_recognition", route_by_intent,
+    {
+        "text_to_sql": "run_sql_subgraph",
+        "schema_query": "run_sql_subgraph",
+        "chat": "chat",
+        "history_query": "history_query",
+        "security": "security",
+        "unsupported": "unsupported_intent",
+    },
+)
+outer_builder.add_edge("run_sql_subgraph", END)
+outer_builder.add_edge("chat", END)
+outer_builder.add_edge("history_query", END)
+outer_builder.add_edge("security", END)
+outer_builder.add_edge("unsupported_intent", END)
+graph = outer_builder.compile()

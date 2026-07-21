@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from app.entities.column_info import ColumnInfo
 from app.entities.metric_info import MetricInfo
@@ -37,15 +37,22 @@ class DBInfoState(TypedDict):
     version: str
 
 
-class DataAgentState(TypedDict):
-    query:str
-    error:str
-    keywords:list[str]
+class DataAgentState(TypedDict, total=False):
+    query: str
+    user_id: str
+    session_id: str
+    role: str
+    error: str | None
+    intent: str
+    memory: dict[str, Any]
+    keywords: list[str]
     retrieved_column_infos: list[ColumnInfo]
     retrieved_metric_infos: list[MetricInfo]
-    retrieved_value_infos:list[ValueInfo]
-    table_infos: list[TableInfoState]  # 表信息
-    metric_infos: list[MetricInfoState]  # 指标信息
+    retrieved_value_infos: list[ValueInfo]
+    table_infos: list[TableInfoState]
+    metric_infos: list[MetricInfoState]
     date_info: DateInfoState
     db_info: DBInfoState
-    sql:str
+    sql: str
+    result: Any
+    response: str

@@ -1,0 +1,14 @@
+# Copy the server entries into app_config.yaml under mcp.servers.
+- name: local-tools
+  transport: stdio
+  command: python
+  args: ["-m", "my_mcp_server"]
+  tools: []
+  allowed_roles: [admin]
+
+# Remote MCP servers may use SSE:
+# - name: remote-tools
+#   transport: sse
+#   url: https://example.com/mcp/sse
+#   tools: [search]
+#   allowed_roles: [user, admin]

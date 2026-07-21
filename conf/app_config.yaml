@@ -42,3 +42,8 @@ llm:
   model_name: deepseek-v4-flash
   api_key: sk-3537365bc23840a992d76a84f71c54d1
   base_url: https://api.deepseek.com
+
+mcp:
+  servers: []
+
+roles: {}

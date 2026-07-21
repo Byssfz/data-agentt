@@ -13,6 +13,7 @@ from app.repositories.mysql.meta.meta_mysql_repositoriy import MetaMySQLReposito
 from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantRepository
 from app.repositories.qdrant.metric_qdrant_repository import MetricQdrantRepository
 from app.services.query_service import QueryService
+from app.repositories.mysql.meta.memory_repository import MemoryRepository
 async def get_meta_session():
     async with meta_mysql_client_manager.session_factory() as meta_session:
         yield meta_session
@@ -39,15 +40,19 @@ async def get_value_es_repository()->ValueESRepository:
 async def get_embedding_client()->HuggingFaceEndpointEmbeddings:
     return embedding_client_manager.client
 
+async def get_memory_repository(session: Annotated[AsyncSession, Depends(get_meta_session)]) -> MemoryRepository:
+    return MemoryRepository(session)
+
 async def get_query_service(meta_mysql_repository:Annotated[MetaMySQLRepository,Depends(get_meta_mysql_repository)],
                  colunmn_qdrant_repository:Annotated[ColumnQdrantRepository,Depends(get_column_qdrant_repository)],
                  metric_qdrant_repository:Annotated[MetricQdrantRepository,Depends(get_metric_qdrant_repository)],
                  value_es_reporitory:Annotated[ValueESRepository,Depends(get_value_es_repository)],
                  dw_mysql_repository:Annotated[DWMySQLRepository,Depends(get_dw_mysql_repository)],
-                 embedding_client:Annotated[HuggingFaceEndpointEmbeddings,Depends(get_embedding_client)])->QueryService:
+                 embedding_client:Annotated[HuggingFaceEndpointEmbeddings,Depends(get_embedding_client)],
+                 memory_repository:Annotated[MemoryRepository,Depends(get_memory_repository)])->QueryService:
     return QueryService(meta_mysql_repository=meta_mysql_repository,
                         colunmn_qdrant_repository=colunmn_qdrant_repository,
                         metric_qdrant_repository=metric_qdrant_repository,
                         value_es_reporitory=value_es_reporitory,
                         dw_mysql_repository=dw_mysql_repository,
-                        embedding_client=embedding_client)
+                        embedding_client=embedding_client, memory_repository=memory_repository)

@@ -56,6 +56,10 @@ class LLMConfig:
     base_url: str
 
 @dataclass
+class MCPConfig:
+    servers: list
+
+@dataclass
 class AppConfig:
     logging: LoggingConfig
     db_meta: DBConfig
@@ -64,6 +68,8 @@ class AppConfig:
     embedding: EmbeddingConfig
     es: ESConfig
     llm: LLMConfig
+    mcp: MCPConfig
+    roles: dict
 
 config_file = Path(__file__).parents[2] / 'conf' / 'app_config.yaml'
 context = OmegaConf.load(config_file)

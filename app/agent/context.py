@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 
@@ -16,3 +16,5 @@ class DataAgentContext(TypedDict):
     value_es_repository:ValueESRepository
     meta_mysql_repository:MetaMySQLRepository
     dw_mysql_repository:DWMySQLRepository
+    memory_repository: Any
+    tool_registry: Any
