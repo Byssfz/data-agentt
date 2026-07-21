@@ -30,6 +30,7 @@
 - MCP 适配：[app/tools/mcp.py](app/tools/mcp.py)
 - 记忆模型/Repository：[app/models/memory.py](app/models/memory.py)、[app/repositories/mysql/meta/memory_repository.py](app/repositories/mysql/meta/memory_repository.py)
 - 配置：[conf/app_config.yaml](conf/app_config.yaml)
+- 工具目录 API：[app/api/routers/tool_router.py](app/api/routers/tool_router.py)
 
 ```bash
 uv sync
@@ -46,6 +47,9 @@ uv run main.py
 - Docker 当前 5 个服务均为 running：MySQL 3306、Qdrant 6333/6334、Embedding 8081、Elasticsearch 9200、Kibana 5601。
 - `.venv` 已通过 `uv sync` 同步完成，`mcp==1.28.1` 及其依赖已安装；stdio/SSE 客户端导入和空 MCP 配置启动检查通过。
 - MCP 结果适配已支持 text、image 和 resource 内容块；图片结果保留 MIME 类型和 base64 数据，可通过 SSE `tool_result` 返回。
+- 本地绘图 MCP stdio 冒烟已通过：发现 `drawing.draw_image`，实际调用成功，结果为 `image / image/png`，说明图片内容适配链路可用。
+- 新增只读工具目录接口 `GET /api/tools`，返回工具名称、类型、输入 schema、角色和意图限制；应用导入和目录函数验证通过。
+- 使用绘图 fixture 完成应用生命周期级验证：启动 lifespan 后发现 `drawing.draw_image`，经过工具注册/权限层实际调用并收到 `image/png`；fixture 返回的是确定性测试图片，不是生产绘图模型。
 - MCP 配置已支持 stdio、SSE 和 Streamable HTTP，并补充绘图工具配置示例；LLM 工具调用提示会要求返回 `entities.tool_name` 和 `entities.arguments`。
 - `meta` 库的 `conversation_message`、`long_term_memory` 已使用非破坏性的 `CREATE TABLE IF NOT EXISTS` 创建，并通过 SQLAlchemy/asyncmy 读取验证。
 - FastAPI 已完成真实 SSE 冒烟：安全请求返回 `security / 0.97 / rule`；模糊请求进入 LLM fallback。Codex 沙箱请求 DeepSeek 受限，但用户已确认直接运行 `app.agent.llm` 正常，项目侧 LLM 配置不再视为卡点。
@@ -54,8 +58,9 @@ uv run main.py
 - `docker/mysql/meta.sql` 新表只会在新建 MySQL 数据卷时自动执行，已有数据卷需要手动建表。
 - `user_id` 当前来自请求体，生产环境必须改为从认证中间件解析，不能信任客户端身份。
 - LLM 返回的 confidence 不是天然校准概率，不能单独作为安全授权依据。
+- Qdrant 客户端 `1.18.0` 与当前服务端 `1.16.3` 有版本兼容性警告；目前功能可用，但建议后续统一版本。
 - 配置文件当前包含开发环境凭证，部署前必须迁移到环境变量或密钥管理系统。
 
 ## 下次继续的第一步
 
-启动一个最小绘图类 stdio MCP server，验证配置加载、工具发现、角色/意图权限过滤、图片结果和实际调用；随后在用户本机验证 structured output，并测试同一 `session_id` 的追问意图是否能借助工作记忆正确路由。
+将真实绘图 MCP Server 替换写入 `conf/app_config.yaml` 的 `mcp.servers`，确认 `GET /api/tools` 能看到真实工具，再用“帮我画图/生成图表”等请求验证 LLM `tool_call`、权限过滤、图片结果和 API `tool_result` SSE；随后统一 Qdrant 版本并测试同一 `session_id` 的追问意图。
