@@ -46,3 +46,34 @@ CREATE TABLE column_metric
     metric_id VARCHAR(64) COMMENT '指标编号',
     PRIMARY KEY (column_id, metric_id)
 );
+
+CREATE TABLE conversation_message
+(
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id VARCHAR(128) NOT NULL,
+    session_id VARCHAR(128) NOT NULL,
+    role VARCHAR(32) NOT NULL,
+    content TEXT NOT NULL,
+    intent VARCHAR(64),
+    tool_name VARCHAR(128),
+    metadata_json JSON,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_conversation_session (session_id, created_at),
+    INDEX idx_conversation_user (user_id, created_at)
+);
+
+CREATE TABLE long_term_memory
+(
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id VARCHAR(128) NOT NULL,
+    memory_type VARCHAR(64) NOT NULL,
+    content TEXT NOT NULL,
+    source VARCHAR(128),
+    confidence FLOAT NOT NULL DEFAULT 1.0,
+    importance FLOAT NOT NULL DEFAULT 0.5,
+    embedding JSON,
+    metadata_json JSON,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_long_term_user (user_id, memory_type, importance)
+);
