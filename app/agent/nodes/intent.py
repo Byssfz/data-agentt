@@ -9,6 +9,7 @@ from app.agent.context import DataAgentContext
 from app.agent.llm import llm
 from app.agent.state import DataAgentState
 from app.core.intent import INTENT_DESCRIPTIONS, RuleDecision, classify_with_rules
+from app.conf.app_config import app_config
 
 
 class IntentDecision(BaseModel):
@@ -31,13 +32,10 @@ def _as_model(decision: RuleDecision) -> IntentDecision:
     )
 
 
-RULE_CONFIDENCE_THRESHOLD = 0.85
-
-
 def _memory_prompt(state: DataAgentState) -> str:
     memory = state.get("memory", {})
     return json.dumps({
-        "working_memory": memory.get("working", [])[-10:],
+        "working_memory": memory.get("working", [])[-app_config.intent.max_memory_messages:],
         "long_term_memory": memory.get("long_term", []),
     }, ensure_ascii=False, default=str)
 
@@ -65,7 +63,12 @@ async def _llm_fallback(state: DataAgentState, rule_decision: IntentDecision, to
 请返回结构化结果，confidence 必须是 0 到 1 之间的数。若无法确定，选择 clarification。
 """
     try:
-        structured_llm = llm.with_structured_output(IntentDecision)
+        try:
+            structured_llm = llm.with_structured_output(
+                IntentDecision, method=app_config.intent.structured_output_method
+            )
+        except TypeError:
+            structured_llm = llm.with_structured_output(IntentDecision)
         decision = await structured_llm.ainvoke(prompt)
         if isinstance(decision, IntentDecision):
             return decision.model_copy(update={"source": "llm"})
@@ -79,7 +82,7 @@ async def _llm_fallback(state: DataAgentState, rule_decision: IntentDecision, to
 
 async def intent_recognition(state: DataAgentState, runtime: Runtime[DataAgentContext]):
     rule_decision = _as_model(classify_with_rules(state["query"]))
-    if rule_decision.confidence >= RULE_CONFIDENCE_THRESHOLD:
+    if rule_decision.confidence >= app_config.intent.rule_confidence_threshold:
         decision = rule_decision
     else:
         decision = await _llm_fallback(state, rule_decision, runtime.context["tool_registry"])

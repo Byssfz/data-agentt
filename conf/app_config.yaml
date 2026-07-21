@@ -47,3 +47,8 @@ mcp:
   servers: []
 
 roles: {}
+
+intent:
+  rule_confidence_threshold: 0.85
+  max_memory_messages: 10
+  structured_output_method: function_calling

@@ -60,6 +60,12 @@ class MCPConfig:
     servers: list
 
 @dataclass
+class IntentConfig:
+    rule_confidence_threshold: float
+    max_memory_messages: int
+    structured_output_method: str
+
+@dataclass
 class AppConfig:
     logging: LoggingConfig
     db_meta: DBConfig
@@ -70,6 +76,7 @@ class AppConfig:
     llm: LLMConfig
     mcp: MCPConfig
     roles: dict
+    intent: IntentConfig
 
 config_file = Path(__file__).parents[2] / 'conf' / 'app_config.yaml'
 context = OmegaConf.load(config_file)
