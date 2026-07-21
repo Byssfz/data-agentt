@@ -5,6 +5,35 @@ from typing import Any
 from app.tools.registry import ToolDefinition, ToolRegistry
 
 
+def normalize_mcp_content(item: Any) -> dict[str, Any]:
+    """Convert MCP content blocks into JSON-safe application results.
+
+    Image blocks keep their base64 payload and MIME type so drawing/image tools
+    can be forwarded through the existing SSE response without losing data.
+    """
+    item_type = getattr(item, "type", None)
+    if item_type == "text" or hasattr(item, "text"):
+        return {"type": "text", "text": getattr(item, "text", "")}
+    if item_type == "image" or hasattr(item, "data"):
+        return {
+            "type": "image",
+            "mime_type": getattr(item, "mimeType", getattr(item, "mime_type", "application/octet-stream")),
+            "data": getattr(item, "data", ""),
+        }
+    if item_type == "resource" or hasattr(item, "resource"):
+        resource = getattr(item, "resource", None)
+        return {
+            "type": "resource",
+            "resource": {
+                "uri": getattr(resource, "uri", None),
+                "mime_type": getattr(resource, "mimeType", getattr(resource, "mime_type", None)),
+                "text": getattr(resource, "text", None),
+                "blob": getattr(resource, "blob", None),
+            },
+        }
+    return {"type": str(item_type or "unknown"), "value": str(item)}
+
+
 def _transport(config: dict[str, Any]):
     if config.get("transport", "stdio") == "stdio":
         from mcp import StdioServerParameters
@@ -17,6 +46,10 @@ def _transport(config: dict[str, Any]):
         from mcp.client.sse import sse_client
 
         return sse_client(config["url"])
+    if config.get("transport") in {"http", "streamable_http"}:
+        from mcp.client.streamable_http import streamable_http_client
+
+        return streamable_http_client(config["url"])
     raise ValueError(f"Unsupported MCP transport: {config.get('transport')}")
 
 
@@ -27,7 +60,10 @@ async def _call(config: dict[str, Any], name: str, arguments: dict[str, Any]):
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
             response = await session.call_tool(name, arguments)
-            return [getattr(item, "text", str(item)) for item in response.content]
+            return {
+                "is_error": bool(getattr(response, "isError", False)),
+                "content": [normalize_mcp_content(item) for item in response.content],
+            }
 
 
 async def register_mcp_servers(registry: ToolRegistry, servers: list[dict[str, Any]]) -> None:
@@ -53,5 +89,8 @@ async def register_mcp_servers(registry: ToolRegistry, servers: list[dict[str, A
                         handler=lambda args, c=config, n=remote_tool.name: _call(c, n, args),
                         input_schema=remote_tool.inputSchema or {},
                         kind="mcp",
+                        read_only=bool(config.get("read_only", True)),
                         allowed_roles=set(config.get("allowed_roles", ["admin"])),
+                        allowed_intents=set(config.get("allowed_intents", [])),
+                        timeout_seconds=float(config.get("timeout_seconds", 60)),
                     ))

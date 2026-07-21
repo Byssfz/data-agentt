@@ -5,6 +5,8 @@
   args: ["-m", "my_mcp_server"]
   tools: []
   allowed_roles: [admin]
+  allowed_intents: [tool_call]
+  read_only: true
 
 # Remote MCP servers may use SSE:
 # - name: remote-tools
@@ -12,3 +14,23 @@
 #   url: https://example.com/mcp/sse
 #   tools: [search]
 #   allowed_roles: [user, admin]
+
+# Drawing/image MCP server example. ImageContent blocks are preserved as
+# {type: image, mime_type, data} in the SSE tool_result event.
+# - name: drawing-tools
+#   transport: stdio
+#   command: python
+#   args: ["-m", "my_drawing_mcp_server"]
+#   tools: [draw_image, create_chart]
+#   allowed_roles: [user, admin]
+#   allowed_intents: [tool_call]
+#   read_only: true
+#   timeout_seconds: 120
+
+# Streamable HTTP MCP server example:
+# - name: remote-drawing-tools
+#   transport: streamable_http
+#   url: http://127.0.0.1:8000/mcp
+#   tools: [draw_image]
+#   allowed_roles: [user, admin]
+#   allowed_intents: [tool_call]

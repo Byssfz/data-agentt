@@ -60,7 +60,7 @@ async def _llm_fallback(state: DataAgentState, rule_decision: IntentDecision, to
 规则分类结果（仅作参考）：
 {rule_decision.model_dump_json(ensure_ascii=False)}
 
-请返回结构化结果，confidence 必须是 0 到 1 之间的数。若无法确定，选择 clarification。
+请返回结构化结果，confidence 必须是 0 到 1 之间的数。若 intent=tool_call，必须在 entities.tool_name 中填写可用工具的完整名称，并在 entities.arguments 中填写符合工具 schema 的参数；若无法确定，选择 clarification。
 """
     try:
         try:
