@@ -49,7 +49,7 @@ class ToolRegistry:
     def list(self) -> list[ToolDefinition]:
         return list(self._tools.values())
 
-    async def execute(self, name: str, arguments: dict[str, Any], *, role: str, intent: str) -> Any:
+    def authorize(self, name: str, *, role: str, intent: str) -> ToolDefinition:
         tool = self.get(name)
         if role not in tool.allowed_roles:
             raise PermissionError(f"Role {role!r} cannot use tool {name!r}")
@@ -57,6 +57,10 @@ class ToolRegistry:
             raise PermissionError(f"Intent {intent!r} cannot use tool {name!r}")
         if not tool.read_only:
             raise PermissionError(f"Mutating tool {name!r} requires explicit confirmation")
+        return tool
+
+    async def execute(self, name: str, arguments: dict[str, Any], *, role: str, intent: str) -> Any:
+        tool = self.authorize(name, role=role, intent=intent)
         if tool.handler is None:
             raise RuntimeError(f"Tool {name!r} has no handler")
         result = tool.handler(arguments)

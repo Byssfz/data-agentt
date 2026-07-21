@@ -44,6 +44,11 @@ class DataAgentState(TypedDict, total=False):
     role: str
     error: str | None
     intent: str
+    intent_confidence: float
+    intent_source: str
+    intent_reason: str
+    intent_alternatives: list[dict[str, Any]]
+    intent_entities: dict[str, Any]
     memory: dict[str, Any]
     keywords: list[str]
     retrieved_column_infos: list[ColumnInfo]

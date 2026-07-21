@@ -245,3 +245,19 @@ MIT License
 ---
 
 **注意**: 配置文件中的 API Key 等敏感信息仅为开发测试用途，请勿将真实凭证提交到公开仓库。
+
+## 🧰 工具与记忆系统
+
+查询接口支持通过 `user_id` 关联用户长期记忆，通过 `session_id` 复用当前会话的对话历史。首次请求可以省略 `session_id`，服务端会返回新的会话编号：
+
+```json
+{
+  "user_id": "alice",
+  "session_id": "session-001",
+  "query": "统计本月销售总额"
+}
+```
+
+系统会在请求开始时加载会话历史和用户长期记忆，并只注入意图识别路由器。规则分类置信度低于阈值时，会调用结构化大模型进行兜底判断；仍无法判断则要求用户澄清。包含“我喜欢”“我偏好”“请记住”“某话术是指”等明确表达时，会异步沉淀为偏好、指令或话术含义记忆。
+
+工具注册入口为 `app/tools/registry.py`，函数和 LangGraph 子图通过 Python 注册；MCP 服务配置位于 `conf/app_config.yaml` 的 `mcp.servers`，stdio/SSE 示例见 `conf/mcp_servers.example.yaml`。工具默认只允许只读调用，变更工具必须显式扩展确认策略。

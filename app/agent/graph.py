@@ -13,9 +13,11 @@ from app.agent.nodes.filter_table import filter_table
 from app.agent.nodes.generate_sql import generate_sql
 from app.agent.nodes.intent import (
     chat_node,
+    clarification_node,
     history_query_node,
     intent_recognition,
     security_node,
+    tool_call_node,
     unsupported_intent,
 )
 from app.agent.nodes.memory import load_memory
@@ -78,10 +80,9 @@ tool_registry.register(ToolDefinition(
 
 async def run_sql_subgraph(state: DataAgentState, runtime: Runtime[DataAgentContext]):
     writer = runtime.stream_writer
-    tool = runtime.context["tool_registry"].get("data.query")
-    role = state.get("role", "user")
-    if role not in tool.allowed_roles or (tool.allowed_intents and state.get("intent") not in tool.allowed_intents):
-        raise PermissionError(f"Role {role!r} cannot use tool {tool.name!r}")
+    runtime.context["tool_registry"].authorize(
+        "data.query", role=state.get("role", "user"), intent=state.get("intent", "")
+    )
     result_state = {}
     async for chunk in sql_graph.astream(state, context=runtime.context, stream_mode="custom"):
         writer(chunk)
@@ -101,6 +102,8 @@ outer_builder.add_node("chat", chat_node)
 outer_builder.add_node("history_query", history_query_node)
 outer_builder.add_node("security", security_node)
 outer_builder.add_node("unsupported_intent", unsupported_intent)
+outer_builder.add_node("clarification", clarification_node)
+outer_builder.add_node("tool_call", tool_call_node)
 outer_builder.add_edge(START, "load_memory")
 outer_builder.add_edge("load_memory", "intent_recognition")
 outer_builder.add_conditional_edges(
@@ -111,6 +114,8 @@ outer_builder.add_conditional_edges(
         "chat": "chat",
         "history_query": "history_query",
         "security": "security",
+        "tool_call": "tool_call",
+        "clarification": "clarification",
         "unsupported": "unsupported_intent",
     },
 )
@@ -119,4 +124,6 @@ outer_builder.add_edge("chat", END)
 outer_builder.add_edge("history_query", END)
 outer_builder.add_edge("security", END)
 outer_builder.add_edge("unsupported_intent", END)
+outer_builder.add_edge("clarification", END)
+outer_builder.add_edge("tool_call", END)
 graph = outer_builder.compile()

@@ -27,6 +27,13 @@ class ToolRegistryTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             asyncio.run(registry.execute("write", {}, role="user", intent="chat"))
 
+    def test_intent_restriction_is_enforced(self):
+        registry = ToolRegistry()
+        registry.register(ToolDefinition(name="query", description="Query", handler=lambda _: 1,
+                                          allowed_intents={"text_to_sql"}))
+        with self.assertRaises(PermissionError):
+            asyncio.run(registry.execute("query", {}, role="user", intent="chat"))
+
 
 if __name__ == "__main__":
     unittest.main()
