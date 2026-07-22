@@ -5,6 +5,13 @@ from typing import Any
 from app.tools.registry import ToolDefinition, ToolRegistry
 
 
+def _streams(transport_result: Any) -> tuple[Any, Any]:
+    """Extract the message streams from MCP transports across client versions."""
+    if not isinstance(transport_result, tuple) or len(transport_result) < 2:
+        raise RuntimeError("MCP transport did not return readable and writable streams")
+    return transport_result[0], transport_result[1]
+
+
 def normalize_mcp_content(item: Any) -> dict[str, Any]:
     """Convert MCP content blocks into JSON-safe application results.
 
@@ -56,7 +63,8 @@ def _transport(config: dict[str, Any]):
 async def _call(config: dict[str, Any], name: str, arguments: dict[str, Any]):
     from mcp import ClientSession
 
-    async with _transport(config) as (read_stream, write_stream):
+    async with _transport(config) as transport_result:
+        read_stream, write_stream = _streams(transport_result)
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
             response = await session.call_tool(name, arguments)
@@ -75,7 +83,8 @@ async def register_mcp_servers(registry: ToolRegistry, servers: list[dict[str, A
         raise RuntimeError("MCP servers are configured but the optional 'mcp' package is not installed") from exc
 
     for config in servers:
-        async with _transport(config) as (read_stream, write_stream):
+        async with _transport(config) as transport_result:
+            read_stream, write_stream = _streams(transport_result)
             async with ClientSession(read_stream, write_stream) as session:
                 await session.initialize()
                 result = await session.list_tools()

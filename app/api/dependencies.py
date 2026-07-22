@@ -5,7 +5,11 @@ from typing import Annotated
 
 from app.clients.embedding_client_manager import embedding_client_manager
 from app.clients.es_client_manager import es_client_manager
-from app.clients.mysql_client_manager import meta_mysql_client_manager, dw_mysql_client_manager
+from app.clients.mysql_client_manager import (
+    meta_mysql_client_manager,
+    dw_mysql_client_manager,
+    memory_mysql_client_manager,
+)
 from app.clients.qdrant_client_manager import qdrant_client_manger
 from app.repositories.es.value_es_repository import ValueESRepository
 from app.repositories.mysql.dw.dw_mysql_repository import DWMySQLRepository
@@ -22,11 +26,19 @@ async def get_dw_session():
     async with dw_mysql_client_manager.session_factory() as dw_session:
         yield dw_session
 
+async def get_memory_session():
+    async with memory_mysql_client_manager.session_factory() as memory_session:
+        yield memory_session
+
+
 async def get_meta_mysql_repository(session:Annotated[AsyncSession, Depends(get_meta_session)])->MetaMySQLRepository:
     return MetaMySQLRepository(session)
 
 async def get_dw_mysql_repository(session:Annotated[AsyncSession, Depends(get_dw_session)])->DWMySQLRepository:
     return DWMySQLRepository(session)
+
+async def get_memory_repository(session: Annotated[AsyncSession, Depends(get_memory_session)]) -> MemoryRepository:
+    return MemoryRepository(session)
 
 async def get_column_qdrant_repository()->ColumnQdrantRepository:
     return ColumnQdrantRepository(qdrant_client_manger.client)
@@ -39,9 +51,6 @@ async def get_value_es_repository()->ValueESRepository:
 
 async def get_embedding_client()->HuggingFaceEndpointEmbeddings:
     return embedding_client_manager.client
-
-async def get_memory_repository(session: Annotated[AsyncSession, Depends(get_meta_session)]) -> MemoryRepository:
-    return MemoryRepository(session)
 
 async def get_query_service(meta_mysql_repository:Annotated[MetaMySQLRepository,Depends(get_meta_mysql_repository)],
                  colunmn_qdrant_repository:Annotated[ColumnQdrantRepository,Depends(get_column_qdrant_repository)],

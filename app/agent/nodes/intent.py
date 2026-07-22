@@ -60,24 +60,34 @@ async def _llm_fallback(state: DataAgentState, rule_decision: IntentDecision, to
 规则分类结果（仅作参考）：
 {rule_decision.model_dump_json(ensure_ascii=False)}
 
-请返回结构化结果，confidence 必须是 0 到 1 之间的数。若 intent=tool_call，必须在 entities.tool_name 中填写可用工具的完整名称，并在 entities.arguments 中填写符合工具 schema 的参数；若无法确定，选择 clarification。
+请只返回一个合法 JSON 对象，不要返回 Markdown 或额外说明。JSON 必须符合 IntentDecision 结构，confidence 必须是 0 到 1 之间的数。若 intent=tool_call，必须在 entities.tool_name 中填写可用工具的完整名称，并在 entities.arguments 中填写符合工具 schema 的参数；若无法确定，选择 clarification。
 """
-    try:
+    methods = [app_config.intent.structured_output_method]
+    if "json_mode" not in methods:
+        # DeepSeek thinking models reject tool_choice/function_calling. JSON mode
+        # keeps the structured contract without sending a tool choice.
+        methods.append("json_mode")
+    errors: list[str] = []
+    for method in methods:
         try:
-            structured_llm = llm.with_structured_output(
-                IntentDecision, method=app_config.intent.structured_output_method
-            )
-        except TypeError:
-            structured_llm = llm.with_structured_output(IntentDecision)
-        decision = await structured_llm.ainvoke(prompt)
-        if isinstance(decision, IntentDecision):
-            return decision.model_copy(update={"source": "llm"})
-        return IntentDecision.model_validate({**decision, "source": "llm"})
-    except Exception as exc:
-        return IntentDecision(
-            intent="clarification", confidence=0.0,
-            reason=f"规则置信度不足且大模型路由失败：{exc}", source="fallback",
-        )
+            try:
+                structured_llm = llm.with_structured_output(IntentDecision, method=method)
+            except TypeError:
+                structured_llm = llm.with_structured_output(IntentDecision)
+            decision = await structured_llm.ainvoke(prompt)
+            if isinstance(decision, IntentDecision):
+                return decision.model_copy(update={"source": "llm"})
+            return IntentDecision.model_validate({**decision, "source": "llm"})
+        except Exception as exc:
+            errors.append(f"{method}: {exc}")
+    if errors:
+        error_message = "；".join(errors)
+    else:
+        error_message = "没有可用的结构化输出方式"
+    return IntentDecision(
+        intent="clarification", confidence=0.0,
+        reason=f"规则置信度不足且大模型路由失败：{error_message}", source="fallback",
+    )
 
 
 async def intent_recognition(state: DataAgentState, runtime: Runtime[DataAgentContext]):

@@ -26,9 +26,11 @@ from app.agent.nodes.recall_column import recall_column
 from app.agent.nodes.recall_metric import recall_metric
 from app.agent.nodes.recall_value import recall_value
 from app.agent.nodes.run_sql import run_sql
+from app.agent.nodes.post_process_result import post_process_result
 from app.agent.nodes.validate_sql import validate_sql
 from app.agent.state import DataAgentState
 from app.tools.registry import ToolRegistry, ToolDefinition
+from app.tools.builtin import export_excel, mermaid_treemap, summarize_result
 
 
 def build_sql_graph():
@@ -76,6 +78,31 @@ tool_registry.register(ToolDefinition(
     kind="graph",
     allowed_intents={"text_to_sql", "schema_query"},
 ))
+tool_registry.register(ToolDefinition(
+    name="export_excel",
+    description="Export the current tabular query result to a downloadable Excel workbook.",
+    handler=export_excel,
+    input_schema={"type": "object", "properties": {
+        "rows": {"type": "array"}, "title": {"type": "string"}
+    }, "required": ["rows"]},
+    allowed_intents={"text_to_sql", "schema_query"},
+))
+tool_registry.register(ToolDefinition(
+    name="summarize_result",
+    description="Summarize the current tabular query result with row count and numeric totals.",
+    handler=summarize_result,
+    input_schema={"type": "object", "properties": {"rows": {"type": "array"}}, "required": ["rows"]},
+    allowed_intents={"text_to_sql", "schema_query"},
+))
+tool_registry.register(ToolDefinition(
+    name="chart.to_mermaid_treemap",
+    description="Convert regional label/value query rows into Mermaid treemap syntax.",
+    handler=mermaid_treemap,
+    input_schema={"type": "object", "properties": {
+        "rows": {"type": "array"}, "label_column": {"type": "string"}, "value_column": {"type": "string"}
+    }, "required": ["rows"]},
+    allowed_intents={"text_to_sql", "schema_query", "tool_call"},
+))
 
 
 async def run_sql_subgraph(state: DataAgentState, runtime: Runtime[DataAgentContext]):
@@ -84,9 +111,13 @@ async def run_sql_subgraph(state: DataAgentState, runtime: Runtime[DataAgentCont
         "data.query", role=state.get("role", "user"), intent=state.get("intent", "")
     )
     result_state = {}
+    result = None
     async for chunk in sql_graph.astream(state, context=runtime.context, stream_mode="custom"):
         writer(chunk)
+        if chunk.get("type") == "result":
+            result = chunk.get("data")
     result_state["response"] = "SQL 查询已完成，请查看上方结果。"
+    result_state["result"] = result
     return result_state
 
 
@@ -98,6 +129,7 @@ outer_builder = StateGraph(state_schema=DataAgentState, context_schema=DataAgent
 outer_builder.add_node("load_memory", load_memory)
 outer_builder.add_node("intent_recognition", intent_recognition)
 outer_builder.add_node("run_sql_subgraph", run_sql_subgraph)
+outer_builder.add_node("post_process_result", post_process_result)
 outer_builder.add_node("chat", chat_node)
 outer_builder.add_node("history_query", history_query_node)
 outer_builder.add_node("security", security_node)
@@ -119,7 +151,8 @@ outer_builder.add_conditional_edges(
         "unsupported": "unsupported_intent",
     },
 )
-outer_builder.add_edge("run_sql_subgraph", END)
+outer_builder.add_edge("run_sql_subgraph", "post_process_result")
+outer_builder.add_edge("post_process_result", END)
 outer_builder.add_edge("chat", END)
 outer_builder.add_edge("history_query", END)
 outer_builder.add_edge("security", END)

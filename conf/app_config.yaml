@@ -23,9 +23,17 @@ db_dw:
   password: Atguigu.123
   database: dw
 
+db_memory:
+  host: localhost
+  port: 3306
+  user: atguigu
+  password: Atguigu.123
+  database: memory
+
+
 qdrant:
   host: localhost
-  port: 6333
+  port: 16333
   embedding_size: 1024
 
 embedding:
@@ -44,11 +52,25 @@ llm:
   base_url: https://api.deepseek.com
 
 mcp:
-  servers: []
+  servers:
+    - name: mermaid
+      transport: streamable_http
+      url: https://mcp.mermaid.ai/mcp
+      tools:
+        - validate_and_render_mermaid_diagram
+        - get_diagram_title
+        - get_diagram_summary
+      allowed_roles:
+        - user
+        - admin
+      allowed_intents:
+        - tool_call
+      read_only: true
+      timeout_seconds: 120
 
 roles: {}
 
 intent:
   rule_confidence_threshold: 0.85
   max_memory_messages: 10
-  structured_output_method: function_calling
+  structured_output_method: json_mode

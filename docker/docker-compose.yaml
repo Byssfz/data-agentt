@@ -44,8 +44,8 @@ services:
     container_name: qdrant
     restart: unless-stopped
     ports:
-      - "6333:6333"   # HTTP
-      - "6334:6334"   # gRPC
+      - "16333:6333"   # HTTP (6333 is excluded by Windows on this host)
+      - "16334:6334"   # gRPC
     volumes:
       - qdrant_data:/qdrant/storage
 

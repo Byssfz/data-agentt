@@ -6,12 +6,14 @@ from fastapi import FastAPI
 from app.api.lifespan import lifespan
 from app.api.routers.query_router import query_router
 from app.api.routers.tool_router import tool_router
+from app.api.routers.export_router import export_router
 from app.core.context import request_id_context_var
 
 app=FastAPI(lifespan=lifespan)
 
 app.include_router(query_router)
 app.include_router(tool_router)
+app.include_router(export_router)
 
 
 # 添加中间件，在每个请求中生成唯一的request_id

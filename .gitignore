@@ -18,6 +18,9 @@ data-agent-fronted/node_modules
 # Logs
 logs/
 
+# Generated exports
+exports/
+
 # Environment
 .env
 

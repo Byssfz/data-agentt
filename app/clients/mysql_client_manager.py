@@ -24,6 +24,7 @@ class MysqlClientManager:
 
 dw_mysql_client_manager = MysqlClientManager(app_config.db_dw)
 meta_mysql_client_manager = MysqlClientManager(app_config.db_meta)
+memory_mysql_client_manager = MysqlClientManager(app_config.db_memory)
 
 if __name__ == '__main__':
     dw_mysql_client_manager.init()

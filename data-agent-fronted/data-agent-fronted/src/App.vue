@@ -43,6 +43,25 @@
             </table>
           </div>
 
+          <!-- 工具结果：摘要、文件和图片 -->
+          <div v-else-if="msg.type === 'tool-result'" class="tool-result">
+            <div class="tool-name">{{ msg.tool }}</div>
+            <div v-for="(text, idx) in msg.texts" :key="`text-${idx}`">{{ text }}</div>
+            <a v-if="msg.downloadUrl" :href="msg.downloadUrl" target="_blank" rel="noopener">
+              下载 Excel 文件
+            </a>
+            <a v-if="msg.previewUrl" :href="msg.previewUrl" target="_blank" rel="noopener">
+              在 Mermaid 中打开预览
+            </a>
+            <img
+                v-for="(image, idx) in msg.images"
+                :key="`image-${idx}`"
+                class="tool-image"
+                :src="`data:${image.mime_type};base64,${image.data}`"
+                alt="工具生成的图像"
+            />
+          </div>
+
           <!-- 错误 -->
           <div v-else-if="msg.type === 'error'" class="error-text">
             {{ msg.content }}
@@ -162,6 +181,25 @@ async function sendQuestion() {
             type: "table",
             columns: Object.keys(data.data[0] || {}),
             rows: data.data,
+          });
+        }
+
+        // ✅ 工具结果：摘要、文件和 MCP 图片
+        else if (data.type === "tool_result") {
+          const payload = data.data || {};
+          const content = Array.isArray(payload.content) ? payload.content : [];
+          const images = payload.type === "image"
+              ? [{type: "image", mime_type: payload.mime_type || "image/png", data: payload.data || ""}]
+              : content.filter((item) => item.type === "image");
+          messages.value.push({
+            role: "assistant",
+            type: "tool-result",
+            tool: data.tool || "tool",
+            texts: [payload.message, payload.detail, payload.text, ...content.filter((item) => item.type === "text").map((item) => item.text)]
+                .filter(Boolean),
+            images,
+            downloadUrl: payload.download_url || "",
+            previewUrl: payload.preview_url || "",
           });
         }
 
@@ -325,6 +363,23 @@ async function sendQuestion() {
 .error-text {
   color: #e74c3c;
   font-weight: 600;
+}
+
+.tool-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tool-name {
+  color: #666;
+  font-size: 12px;
+}
+
+.tool-image {
+  max-width: 100%;
+  border-radius: 8px;
+  background: white;
 }
 
 /* 悬浮输入框 */

@@ -70,6 +70,7 @@ class AppConfig:
     logging: LoggingConfig
     db_meta: DBConfig
     db_dw: DBConfig
+    db_memory:DBConfig
     qdrant: QdrantConfig
     embedding: EmbeddingConfig
     es: ESConfig
