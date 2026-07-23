@@ -26,7 +26,7 @@
 - 真实组合请求“统计各个地区的销售额，并总结结果、导出 Excel 和树状图”已验证：SQL 结果、摘要、合法 XLSX 和 Mermaid PNG 均通过 SSE 返回。
 - 前端已增加 `tool_result` 的摘要、文件下载和 base64 图片渲染。
 - Mermaid MCP 的冗长原始文本、完整代码和提示词不再直接展示给用户；后端仅返回“树状图已生成”、图片和可选预览链接。
-- `.venv` 已通过 `uv sync` 安装 `mcp==1.28.1`；当前 10 项测试全部通过，编译检查通过。
+- `.venv` 已通过 `uv sync` 安装 `mcp==1.28.1`；当前 20 项测试全部通过，编译检查通过。
 - `ToolRegistry` 已使用 JSON Schema 在注册时校验 schema、执行时校验 arguments；缺少必填参数、类型错误和额外字段会在 handler 执行前失败。
 - MCP server 注册已按 server 隔离异常；单个 server 连接、初始化或工具发现失败时记录错误并继续启动其他 MCP server。
 - 已删除 `post_process_result` 节点和查询完成后的自动后处理连线；查询结果通过 `conversation_message.metadata_json.result` 保存，后续独立工具调用可读取上一轮结构化结果并补齐 `rows` 参数。
@@ -51,13 +51,16 @@
 - 主图增加独立 `refuse` 节点；聊天回复使用路由模型返回的 `answer`。
 - Excel 和绘图注册为 `result.export_excel`、`chart.draw` 命名空间工具；`data.query` 继续调用已有 SQL LangGraph。
 - 保持现有 ToolRegistry 的 JSON Schema、权限和 MCP 能力，不重做已经验证的底层工具链。
-- 新增 chat/refuse 路由测试；`.venv` 中没有 pytest，因此使用 `unittest discover` 验证 17 项测试，并通过 compileall。
+- 新增 chat/refuse 路由测试；`.venv` 中没有 pytest，因此使用 `unittest discover` 验证 20 项测试，并通过 compileall。
+- 工具调用校验失败现在最多触发一次 LLM 参数修正；修正后的工具名和参数仍会重新经过 ToolRegistry 校验。
+- `data.query` 的 `query_result.rows` 会额外以 `result` 事件发出，保证 QueryService 能保存结果供下一轮导出或绘图使用。
+- 新增统一工具目录测试，确认 `data.query`、`result.export_excel`、`chart.draw` 均已注册；当前测试总数为 20 项。
 
 ## 还剩什么
 
 ### P0：下一步优先完成
 
-- 为工具参数校验失败增加一次受控的路由自动修正，再失败时澄清或返回错误。
+- 真实 API/数据库/MCP 依赖下验证“查询 → 下一轮导出/绘图”的完整链路。
 - 完善 MCP 启动容错：单个 MCP server 连接失败时不应阻塞整个应用启动，应记录错误并让其他工具继续可用。
 - 解决真实 MCP 工具的会话复用、断线重连和健康状态；当前每次调用都会重新建立 MCP session。
 - 将结果后处理从关键词触发升级为明确的结果动作意图，避免“图/导出/总结”关键词误触发。
@@ -137,4 +140,4 @@ Invoke-WebRequest http://127.0.0.1:8000/api/tools
 
 ## 下次继续的第一步
 
-下一步为参数校验失败增加一次受控自动修正，并补跨轮次 `tool_call`（查询后导出、查询后绘图）的集成测试；之后处理导出文件生命周期、图片大小限制和认证/敏感数据安全。
+下一步补真实依赖下跨轮次 `tool_call`（查询后导出、查询后绘图）的集成测试；之后处理导出文件生命周期、图片大小限制和认证/敏感数据安全。
