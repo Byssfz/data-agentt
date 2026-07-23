@@ -66,6 +66,7 @@
 - 会话结果保存前会将 `Decimal`、日期时间和嵌套结果转换为 JSON 兼容值，避免查询成功后因记忆 metadata 写入失败而返回错误。
 - 长期记忆保存已统一为 `memory.save` 工具：意图识别负责生成 `content` 和 `memory_type`，ToolRegistry 校验后调用 MemoryRepository；查询服务不再执行正则隐式保存。
 - 意图识别 Prompt 已明确要求将会话历史/长期记忆中的省略条件解析进工具参数；SSE `intent` 事件和工具调用日志现在记录参数，便于定位上下文补全或参数传递问题。
+- 意图路由已兼容闲聊/拒答模型返回 `arguments: null`，统一按空字典处理，避免合法回答因工具参数为空而降级为澄清。
 - 导出结果会清理 24 小时前的生成文件；导出最多 10,000 行、生成文件最多 10MB；MCP 图片必须是合法 base64 且解码后不超过 8MB。
 - API 默认忽略客户端传入的 `user_id` 并使用 `anonymous`；仅在显式设置 `DATA_AGENT_TRUSTED_PROXY=true` 时读取可信反向代理的 `X-Authenticated-User`。
 

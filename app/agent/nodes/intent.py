@@ -17,7 +17,7 @@ from app.conf.app_config import app_config
 class IntentDecision(BaseModel):
     route: Literal["tool_call", "chat", "refuse"] = "tool_call"
     tool_name: str | None = None
-    arguments: dict = Field(default_factory=dict)
+    arguments: dict | None = Field(default_factory=dict)
     answer: str | None = None
     intent: str = "tool_call"
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -29,7 +29,7 @@ class IntentDecision(BaseModel):
 
 class ToolCallDecision(BaseModel):
     tool_name: str
-    arguments: dict = Field(default_factory=dict)
+    arguments: dict | None = Field(default_factory=dict)
 
 
 def _as_model(decision: RuleDecision) -> IntentDecision:
@@ -101,8 +101,9 @@ async def _llm_fallback(state: DataAgentState, rule_decision: IntentDecision, to
                 structured_llm = llm.with_structured_output(IntentDecision)
             decision = await structured_llm.ainvoke(prompt)
             if isinstance(decision, IntentDecision):
-                return decision.model_copy(update={"source": "llm"})
-            return IntentDecision.model_validate({**decision, "source": "llm"})
+                return decision.model_copy(update={"source": "llm", "arguments": decision.arguments or {}})
+            validated = IntentDecision.model_validate({**decision, "source": "llm"})
+            return validated.model_copy(update={"arguments": validated.arguments or {}})
         except Exception as exc:
             errors.append(f"{method}: {exc}")
             logger.warning(f"意图路由结构化输出失败: method={method}, error={str(exc)}")
@@ -152,8 +153,9 @@ async def _repair_tool_call(state: DataAgentState, tool_name: str, arguments: di
                 structured_llm = llm.with_structured_output(ToolCallDecision)
             decision = await structured_llm.ainvoke(prompt)
             if isinstance(decision, ToolCallDecision):
-                return decision
-            return ToolCallDecision.model_validate(decision)
+                return decision.model_copy(update={"arguments": decision.arguments or {}})
+            validated = ToolCallDecision.model_validate(decision)
+            return validated.model_copy(update={"arguments": validated.arguments or {}})
         except Exception as exc:
             errors.append(f"{method}: {exc}")
     raise ValueError("工具参数自动修正失败：" + "；".join(errors))

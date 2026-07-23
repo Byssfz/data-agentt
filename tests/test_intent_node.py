@@ -101,6 +101,15 @@ class IntentNodeTests(unittest.TestCase):
 
         self.assertEqual(decision.confidence, 0.0)
 
+    def test_chat_route_accepts_null_arguments(self):
+        decision = IntentDecision.model_validate({
+            "route": "chat",
+            "answer": "1+1等于2。",
+            "arguments": None,
+        })
+
+        self.assertIsNone(decision.arguments)
+
     def test_refuse_route_does_not_select_a_tool(self):
         llm_decision = IntentDecision(
             route="refuse",
