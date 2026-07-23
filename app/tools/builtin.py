@@ -3,19 +3,39 @@ from __future__ import annotations
 import re
 import uuid
 import zipfile
+import base64
+import time
 from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
 
 EXPORT_DIR = Path(__file__).parents[2] / "exports"
+MAX_EXPORT_ROWS = 10_000
+MAX_EXPORT_FILE_BYTES = 10 * 1024 * 1024
+MAX_IMAGE_BASE64_BYTES = 8 * 1024 * 1024
+EXPORT_RETENTION_SECONDS = 24 * 60 * 60
 
 
 def _rows(arguments: dict[str, Any]) -> list[dict[str, Any]]:
     rows = arguments.get("rows", [])
     if not isinstance(rows, list):
         raise ValueError("rows must be a list")
+    if len(rows) > MAX_EXPORT_ROWS:
+        raise ValueError(f"rows exceeds the limit of {MAX_EXPORT_ROWS}")
     return [row if isinstance(row, dict) else {"value": row} for row in rows]
+
+
+def _cleanup_exports() -> None:
+    if not EXPORT_DIR.is_dir():
+        return
+    cutoff = time.time() - EXPORT_RETENTION_SECONDS
+    for path in EXPORT_DIR.glob("query_result_*.xlsx"):
+        try:
+            if path.is_file() and path.stat().st_mtime < cutoff:
+                path.unlink()
+        except OSError:
+            continue
 
 
 def _cell(value: Any, row: int, column: int) -> str:
@@ -85,9 +105,13 @@ def export_excel(arguments: dict[str, Any]) -> dict[str, Any]:
     rows = _rows(arguments)
     title = str(arguments.get("title", "Query Result"))
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    _cleanup_exports()
     filename = f"query_result_{uuid.uuid4().hex}.xlsx"
     path = EXPORT_DIR / filename
     _write_xlsx(path, rows, title)
+    if path.stat().st_size > MAX_EXPORT_FILE_BYTES:
+        path.unlink(missing_ok=True)
+        raise ValueError(f"generated export exceeds the limit of {MAX_EXPORT_FILE_BYTES} bytes")
     return {
         "type": "file",
         "filename": filename,
@@ -158,11 +182,20 @@ async def draw_treemap(arguments: dict[str, Any], *, role: str = "user", registr
     preview_match = re.search(r"https://mermaid\.ai/live/edit\?[^\s)]+", text)
     if images:
         image = images[0]
+        image_data = image.get("data", "")
+        if not isinstance(image_data, str):
+            raise ValueError("MCP image data must be base64 text")
+        try:
+            decoded_size = len(base64.b64decode(image_data, validate=True))
+        except (ValueError, TypeError) as exc:
+            raise ValueError("MCP image data is not valid base64") from exc
+        if decoded_size > MAX_IMAGE_BASE64_BYTES:
+            raise ValueError(f"generated image exceeds the limit of {MAX_IMAGE_BASE64_BYTES} bytes")
         return {
             "type": "image",
             "message": "树状图已生成",
             "mime_type": image.get("mime_type", "image/png"),
-            "data": image.get("data", ""),
+            "data": image_data,
             "preview_url": preview_match.group(0) if preview_match else None,
         }
     return {"type": "text", "message": "树状图生成失败", "detail": text[:500]}

@@ -1,8 +1,18 @@
+import asyncio
+import base64
 import unittest
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
-from app.tools.builtin import export_excel, mermaid_treemap, summarize_result
+from app.tools.builtin import (
+    MAX_EXPORT_ROWS,
+    draw_treemap,
+    export_excel,
+    mermaid_treemap,
+    summarize_result,
+)
 
 
 class BuiltinToolTests(unittest.TestCase):
@@ -26,6 +36,23 @@ class BuiltinToolTests(unittest.TestCase):
                 self.assertIn("xl/worksheets/sheet1.xml", archive.namelist())
         finally:
             path.unlink(missing_ok=True)
+
+    def test_export_rejects_too_many_rows(self):
+        with self.assertRaisesRegex(ValueError, "rows exceeds"):
+            export_excel({"rows": [{}] * (MAX_EXPORT_ROWS + 1)})
+
+    def test_draw_rejects_oversized_image(self):
+        registry = SimpleNamespace(
+            list=lambda: [SimpleNamespace(name="mermaid.validate_and_render_mermaid_diagram")],
+            execute=AsyncMock(return_value={"content": [{
+                "type": "image",
+                "mime_type": "image/png",
+                "data": base64.b64encode(b"too large").decode(),
+            }]}),
+        )
+        with patch("app.tools.builtin.MAX_IMAGE_BASE64_BYTES", 1):
+            with self.assertRaisesRegex(ValueError, "exceeds the limit"):
+                asyncio.run(draw_treemap({"rows": [{"地区": "华北", "销售额": 10}]}, registry=registry))
 
 
 if __name__ == "__main__":
