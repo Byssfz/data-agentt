@@ -23,6 +23,7 @@ exports/
 
 # Environment
 .env
+conf/app_config.yaml
 
 # Large model files
 *.bin

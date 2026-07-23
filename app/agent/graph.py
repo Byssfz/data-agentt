@@ -30,7 +30,7 @@ from app.agent.nodes.run_sql import run_sql
 from app.agent.nodes.validate_sql import validate_sql
 from app.agent.state import DataAgentState
 from app.tools.registry import ToolRegistry, ToolDefinition
-from app.tools.builtin import draw_treemap, export_excel, summarize_result
+from app.tools.builtin import draw_treemap, export_excel, save_long_term_memory, summarize_result
 
 
 def build_sql_graph():
@@ -132,6 +132,17 @@ tool_registry.register(ToolDefinition(
     }, "required": ["rows"]},
     allowed_intents={"text_to_sql", "schema_query", "tool_call"},
 ))
+tool_registry.register(ToolDefinition(
+    name="memory.save",
+    description="Save a user's explicit preference, instruction, or phrase meaning to long-term memory.",
+    handler=save_long_term_memory,
+    input_schema={"type": "object", "properties": {
+        "content": {"type": "string", "minLength": 1},
+        "memory_type": {"type": "string", "enum": ["preference", "instruction", "phrase_meaning"]},
+        "user_id": {"type": "string"},
+    }, "required": ["content"], "additionalProperties": False},
+    allowed_intents={"tool_call"},
+))
 
 
 def route_by_intent(state: DataAgentState) -> str:
@@ -178,4 +189,4 @@ outer_builder.add_edge("tool_call", END)
 graph = outer_builder.compile()
 
 
-print(graph.get_graph().draw_mermaid())
+# print(graph.get_graph().draw_mermaid())
