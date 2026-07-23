@@ -58,12 +58,14 @@
 - 真实 `GET /api/tools` 返回 200，命名空间工具和已发现的 Mermaid MCP 工具均可见。
 - 真实 `POST /api/query` 闲聊冒烟通过：SSE 返回 `route=chat`、模型回答和 session 事件。
 - 真实跨轮次 E2E 通过：同一会话先调用 `data.query` 返回 5 行地区销售数据，随后调用 `result.export_excel` 返回 XLSX 下载地址，再调用 `chart.draw` 返回 Mermaid PNG 图片。
+- 导出结果会清理 24 小时前的生成文件；导出最多 10,000 行、生成文件最多 10MB；MCP 图片必须是合法 base64 且解码后不超过 8MB。
+- API 默认忽略客户端传入的 `user_id` 并使用 `anonymous`；仅在显式设置 `DATA_AGENT_TRUSTED_PROXY=true` 时读取可信反向代理的 `X-Authenticated-User`。
 
 ## 还剩什么
 
 ### P0：下一步优先完成
 
-- 处理导出文件生命周期、图片大小限制和认证/敏感数据安全。
+- 完善长期记忆和导出资源的用户级隔离，并补充正式认证中间件。
 - 完善 MCP 启动容错：单个 MCP server 连接失败时不应阻塞整个应用启动，应记录错误并让其他工具继续可用。
 - 解决真实 MCP 工具的会话复用、断线重连和健康状态；当前每次调用都会重新建立 MCP session。
 - 将结果后处理从关键词触发升级为明确的结果动作意图，避免“图/导出/总结”关键词误触发。
@@ -80,7 +82,7 @@
 - 统一 Qdrant 客户端 `1.18.0` 与服务端 `1.16.3` 版本，消除启动警告。
 - 为数据库记忆表增加正式迁移流程；`docker/mysql/meta.sql` 只对新建数据卷自动执行。
 - 补充真实 MCP、数据库 Repository、FastAPI、Graph 路由、权限和 SSE 图片结果集成测试。
-- 对图片结果增加大小限制或对象存储 URL，避免大 base64 图片直接塞进 SSE。
+- 评估对图片结果使用对象存储 URL，进一步避免 base64 图片直接塞进 SSE。
 - 为 `export_excel` 增加正式工作簿格式、列宽/数字格式和导出保留策略；当前是最小可用 XLSX 生成器。
 - 评估用官方 `langchain-mcp-adapters` 替换当前自写 MCP 适配层。
 
