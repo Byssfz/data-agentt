@@ -45,7 +45,7 @@
 
           <!-- 工具结果：摘要、文件和图片 -->
           <div v-else-if="msg.type === 'tool-result'" class="tool-result">
-            <div class="tool-name">{{ msg.tool }}</div>
+            <div class="tool-name">{{ toolLabel(msg.tool) }}</div>
             <div v-for="(text, idx) in msg.texts" :key="`text-${idx}`">{{ text }}</div>
             <a v-if="msg.downloadUrl" :href="msg.downloadUrl" target="_blank" rel="noopener">
               下载 Excel 文件
@@ -98,6 +98,17 @@ const question = ref("");
 const loading = ref(false);
 const messages = ref([]);
 const messagesEl = ref(null);
+
+const toolLabels = {
+  "data.query": "查询数据",
+  "result.export_excel": "导出 Excel",
+  "chart.draw": "生成图表",
+  "summarize_result": "总结结果",
+};
+
+function toolLabel(tool) {
+  return toolLabels[tool] || "工具结果";
+}
 
 function scrollToBottom() {
   const el = messagesEl.value;
@@ -177,7 +188,7 @@ async function sendQuestion() {
         // ✅ 意图识别结果：在进度列表中显示路由决策
         else if (data.type === "intent") {
           const decisionText = data.tool
-              ? `意图：${data.intent} → ${data.tool}`
+              ? `意图：${data.intent} → ${toolLabel(data.tool)}`
               : `意图：${data.intent}`;
           let step = steps.find((s) => s.text.startsWith("意图："));
           if (!step) {
