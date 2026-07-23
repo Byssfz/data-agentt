@@ -93,11 +93,16 @@
 import {nextTick, ref} from "vue";
 
 const API_URL = "/api/query";
+const SESSION_STORAGE_KEY = "data-agent-session-id";
 
 const question = ref("");
 const loading = ref(false);
 const messages = ref([]);
 const messagesEl = ref(null);
+const sessionId = ref(
+    sessionStorage.getItem(SESSION_STORAGE_KEY) || crypto.randomUUID(),
+);
+sessionStorage.setItem(SESSION_STORAGE_KEY, sessionId.value);
 
 const toolLabels = {
   "data.query": "查询数据",
@@ -140,7 +145,7 @@ async function sendQuestion() {
     const response = await fetch(API_URL, {
       method: "POST",
       headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({query: q}),
+      body: JSON.stringify({query: q, session_id: sessionId.value}),
     });
 
     if (!response.body) throw new Error("服务器未返回流");
@@ -253,6 +258,12 @@ async function sendQuestion() {
             downloadUrl: payload.download_url || "",
             previewUrl: payload.preview_url || "",
           });
+        }
+
+        // ✅ 会话标识：后端返回的 ID 作为后续请求的稳定会话上下文
+        else if (data.type === "session" && data.session_id) {
+          sessionId.value = data.session_id;
+          sessionStorage.setItem(SESSION_STORAGE_KEY, sessionId.value);
         }
 
         // ✅ 错误

@@ -62,6 +62,7 @@
 - 前端沿用原有 steps 容器，新增意图决策、文本 result、clarification 和 history 事件展示；真实 8002 SSE 冒烟已验证“加载记忆 → 意图识别 → 闲聊回复”的完整顺序。
 - 修复查询结果重复展示：SQL 子图已发送 `result` 时，外层 `tool_call` 不再重复发送相同 rows，避免前端渲染两张相同表格。
 - 当前后端测试总数为 27 项，前端 `npm run build` 通过。
+- 前端已使用 `sessionStorage` 持久化并回传 `session_id`，同一浏览器会话可正确加载工作记忆；`user_id=anonymous` 仍是未接入认证时的安全默认值。
 - 导出结果会清理 24 小时前的生成文件；导出最多 10,000 行、生成文件最多 10MB；MCP 图片必须是合法 base64 且解码后不超过 8MB。
 - API 默认忽略客户端传入的 `user_id` 并使用 `anonymous`；仅在显式设置 `DATA_AGENT_TRUSTED_PROXY=true` 时读取可信反向代理的 `X-Authenticated-User`。
 
