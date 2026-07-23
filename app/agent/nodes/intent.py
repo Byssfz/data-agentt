@@ -17,7 +17,7 @@ class IntentDecision(BaseModel):
     route: Literal["tool_call", "chat", "refuse"] = "tool_call"
     tool_name: str | None = None
     arguments: dict = Field(default_factory=dict)
-    answer: str = ""
+    answer: str | None = None
     intent: str = "tool_call"
     confidence: float = Field(ge=0.0, le=1.0)
     reason: str = ""
@@ -182,7 +182,7 @@ async def intent_recognition(state: DataAgentState, runtime: Runtime[DataAgentCo
     })
     return {
         "route": decision.route,
-        "route_answer": decision.answer,
+        "route_answer": decision.answer or "",
         "tool_name": tool_name or "",
         "tool_arguments": arguments,
         "intent": decision.intent,

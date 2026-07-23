@@ -47,6 +47,28 @@ class IntentNodeTests(unittest.TestCase):
         self.assertEqual(result["route"], "chat")
         self.assertEqual(result["route_answer"], "你好，很高兴和你聊天。")
 
+    def test_tool_route_accepts_null_answer(self):
+        llm_decision = IntentDecision(
+            route="tool_call",
+            intent="text_to_sql",
+            confidence=0.95,
+            tool_name="data.query",
+            arguments={"query": "查询销售额"},
+            answer=None,
+            source="llm",
+        )
+        runtime = SimpleNamespace(
+            context={"tool_registry": SimpleNamespace(list=lambda: [])},
+            stream_writer=lambda _: None,
+        )
+        state = {"query": "查询销售额", "memory": {}}
+
+        with patch("app.agent.nodes.intent._llm_fallback", new=AsyncMock(return_value=llm_decision)):
+            result = asyncio.run(intent_recognition(state, runtime))
+
+        self.assertEqual(result["route"], "tool_call")
+        self.assertEqual(result["route_answer"], "")
+
     def test_refuse_route_does_not_select_a_tool(self):
         llm_decision = IntentDecision(
             route="refuse",
