@@ -84,6 +84,7 @@ async def _llm_fallback(state: DataAgentState, rule_decision: IntentDecision, to
 
 请只返回一个合法 JSON 对象，不要返回 Markdown 或额外说明。JSON 必须符合 IntentDecision 结构，confidence 必须是 0 到 1 之间的数。
 当 route=tool_call 时，必须在 tool_name 中填写可用工具的完整名称，并在 arguments 中填写符合工具 schema 的参数；不要填写不存在的工具。
+如果当前问题是追问、省略条件或依赖前文的指代，必须结合会话历史和长期记忆补全隐含条件，再把补全后的完整请求写入工具参数。例如前文说“后面统计都用华北”，当前问题是“统计销售额”时，data.query 的 arguments.query 必须包含“地区为华北”；不能只传当前这一句原始问题。
 当 route=chat 或 route=refuse 时，填写 answer，不要调用工具。
 """
     methods = [app_config.intent.structured_output_method]
@@ -186,6 +187,7 @@ async def intent_recognition(state: DataAgentState, runtime: Runtime[DataAgentCo
             "alternatives": decision.alternatives,
             "entities": entities,
             "tool": tool_name,
+            "arguments": arguments,
         })
         writer({"type": "progress", "step": step, "status": "success"})
         logger.info(
@@ -259,6 +261,8 @@ async def tool_call_node(state: DataAgentState, runtime: Runtime[DataAgentContex
             latest_result = state.get("memory", {}).get("latest_result")
             if isinstance(latest_result, list):
                 arguments["rows"] = latest_result
+        argument_text = json.dumps(arguments, ensure_ascii=False, default=str)
+        logger.info(f"工具调用参数: tool={tool_name}, arguments={argument_text[:2000]}")
         try:
             result = await runtime.context["tool_registry"].execute(
                 tool_name, arguments,
