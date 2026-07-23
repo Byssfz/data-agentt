@@ -174,6 +174,20 @@ async function sendQuestion() {
           }
         }
 
+        // ✅ 意图识别结果：在进度列表中显示路由决策
+        else if (data.type === "intent") {
+          const decisionText = data.tool
+              ? `意图：${data.intent} → ${data.tool}`
+              : `意图：${data.intent}`;
+          let step = steps.find((s) => s.text.startsWith("意图："));
+          if (!step) {
+            steps.push({text: decisionText, status: "success"});
+          } else {
+            step.text = decisionText;
+            step.status = "success";
+          }
+        }
+
         // ✅ 表格结果
         else if (data.type === "result" && Array.isArray(data.data)) {
           messages.value.push({
@@ -181,6 +195,33 @@ async function sendQuestion() {
             type: "table",
             columns: Object.keys(data.data[0] || {}),
             rows: data.data,
+          });
+        }
+
+        // ✅ 文本结果：闲聊、拒答和不支持分支
+        else if (data.type === "result" && data.data !== undefined) {
+          messages.value.push({
+            role: "assistant",
+            type: "text",
+            content: typeof data.data === "string" ? data.data : JSON.stringify(data.data),
+          });
+        }
+
+        // ✅ 澄清结果
+        else if (data.type === "clarification") {
+          messages.value.push({
+            role: "assistant",
+            type: "text",
+            content: data.data || "请补充说明你的需求。",
+          });
+        }
+
+        // ✅ 历史结果
+        else if (data.type === "history") {
+          messages.value.push({
+            role: "assistant",
+            type: "text",
+            content: JSON.stringify(data.data || [], null, 2),
           });
         }
 

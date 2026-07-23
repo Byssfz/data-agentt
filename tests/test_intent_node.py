@@ -47,6 +47,30 @@ class IntentNodeTests(unittest.TestCase):
         self.assertEqual(result["route"], "chat")
         self.assertEqual(result["route_answer"], "你好，很高兴和你聊天。")
 
+    def test_intent_emits_progress_and_decision_events(self):
+        events = []
+        llm_decision = IntentDecision(
+            route="chat",
+            intent="chat",
+            confidence=0.98,
+            answer="你好。",
+            source="llm",
+        )
+        runtime = SimpleNamespace(
+            context={"tool_registry": SimpleNamespace(list=lambda: [])},
+            stream_writer=events.append,
+        )
+        state = {"query": "你好", "memory": {}}
+
+        with patch("app.agent.nodes.intent._llm_fallback", new=AsyncMock(return_value=llm_decision)):
+            asyncio.run(intent_recognition(state, runtime))
+
+        self.assertEqual(
+            [(event["type"], event["status"]) for event in events if event["type"] == "progress"],
+            [("progress", "running"), ("progress", "success")],
+        )
+        self.assertEqual(events[1]["type"], "intent")
+
     def test_tool_route_accepts_null_answer(self):
         llm_decision = IntentDecision(
             route="tool_call",
@@ -135,8 +159,10 @@ class IntentNodeTests(unittest.TestCase):
 
         asyncio.run(tool_call_node(state, runtime))
 
-        self.assertEqual(events[0]["type"], "tool_result")
-        self.assertEqual(events[1], {"type": "result", "data": [{"地区": "华东", "销售额": 10}]})
+        self.assertEqual(events[0], {"type": "progress", "step": "调用工具", "status": "running"})
+        self.assertEqual(events[1]["type"], "tool_result")
+        self.assertEqual(events[2], {"type": "result", "data": [{"地区": "华东", "销售额": 10}]})
+        self.assertEqual(events[3], {"type": "progress", "step": "调用工具", "status": "success"})
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ from app.agent.context import DataAgentContext
 from app.agent.llm import llm
 from app.agent.state import DataAgentState
 from app.core.intent import INTENT_DESCRIPTIONS, RuleDecision, classify_with_rules
+from app.core.log import logger
 from app.conf.app_config import app_config
 
 
@@ -103,6 +104,7 @@ async def _llm_fallback(state: DataAgentState, rule_decision: IntentDecision, to
             return IntentDecision.model_validate({**decision, "source": "llm"})
         except Exception as exc:
             errors.append(f"{method}: {exc}")
+            logger.warning(f"意图路由结构化输出失败: method={method}, error={str(exc)}")
     if errors:
         error_message = "；".join(errors)
     else:
@@ -157,58 +159,84 @@ async def _repair_tool_call(state: DataAgentState, tool_name: str, arguments: di
 
 
 async def intent_recognition(state: DataAgentState, runtime: Runtime[DataAgentContext]):
-    rule_decision = _as_model(classify_with_rules(state["query"]))
-    # Rules are only a cheap hint now. The LLM owns the final intent, tool,
-    # and argument decision so follow-up requests keep one consistent contract.
-    decision = await _llm_fallback(state, rule_decision, runtime.context["tool_registry"])
-    entities = dict(decision.entities)
-    tool_name = decision.tool_name or entities.get("tool_name")
-    arguments = dict(decision.arguments or entities.get("arguments", {}))
-    if decision.route == "tool_call" and not tool_name and decision.intent in {"text_to_sql", "schema_query"}:
-        tool_name = "data.query"
-        arguments = {"query": state["query"]}
-    if tool_name:
-        entities.update({"tool_name": tool_name, "arguments": arguments})
-    runtime.stream_writer({
-        "type": "intent",
-        "route": decision.route,
-        "intent": decision.intent,
-        "confidence": decision.confidence,
-        "source": decision.source,
-        "reason": decision.reason,
-        "alternatives": decision.alternatives,
-        "entities": entities,
-        "tool": tool_name,
-    })
-    return {
-        "route": decision.route,
-        "route_answer": decision.answer or "",
-        "tool_name": tool_name or "",
-        "tool_arguments": arguments,
-        "intent": decision.intent,
-        "intent_confidence": decision.confidence,
-        "intent_source": decision.source,
-        "intent_reason": decision.reason,
-        "intent_alternatives": decision.alternatives,
-        "intent_entities": entities,
-    }
+    writer = runtime.stream_writer
+    step = "意图识别"
+    writer({"type": "progress", "step": step, "status": "running"})
+    try:
+        rule_decision = _as_model(classify_with_rules(state["query"]))
+        logger.info(f"规则意图分类: intent={rule_decision.intent}, confidence={rule_decision.confidence}")
+        # Rules are only a cheap hint now. The LLM owns the final intent, tool,
+        # and argument decision so follow-up requests keep one consistent contract.
+        decision = await _llm_fallback(state, rule_decision, runtime.context["tool_registry"])
+        entities = dict(decision.entities)
+        tool_name = decision.tool_name or entities.get("tool_name")
+        arguments = dict(decision.arguments or entities.get("arguments", {}))
+        if decision.route == "tool_call" and not tool_name and decision.intent in {"text_to_sql", "schema_query"}:
+            tool_name = "data.query"
+            arguments = {"query": state["query"]}
+        if tool_name:
+            entities.update({"tool_name": tool_name, "arguments": arguments})
+        writer({
+            "type": "intent",
+            "route": decision.route,
+            "intent": decision.intent,
+            "confidence": decision.confidence,
+            "source": decision.source,
+            "reason": decision.reason,
+            "alternatives": decision.alternatives,
+            "entities": entities,
+            "tool": tool_name,
+        })
+        writer({"type": "progress", "step": step, "status": "success"})
+        logger.info(
+            f"意图识别完成: route={decision.route}, intent={decision.intent}, "
+            f"tool={tool_name}, confidence={decision.confidence}, source={decision.source}"
+        )
+        return {
+            "route": decision.route,
+            "route_answer": decision.answer or "",
+            "tool_name": tool_name or "",
+            "tool_arguments": arguments,
+            "intent": decision.intent,
+            "intent_confidence": decision.confidence,
+            "intent_source": decision.source,
+            "intent_reason": decision.reason,
+            "intent_alternatives": decision.alternatives,
+            "intent_entities": entities,
+        }
+    except Exception as exc:
+        writer({"type": "progress", "step": step, "status": "error"})
+        logger.error(f"意图识别失败: {str(exc)}")
+        raise
 
 
 async def unsupported_intent(state: DataAgentState, runtime: Runtime[DataAgentContext]):
+    step = "不支持意图"
+    runtime.stream_writer({"type": "progress", "step": step, "status": "running"})
     message = f"当前暂不支持意图：{state['intent']}"
     runtime.stream_writer({"type": "result", "data": message})
+    runtime.stream_writer({"type": "progress", "step": step, "status": "success"})
+    logger.info(f"不支持的意图: {state['intent']}")
     return {"response": message}
 
 
 async def clarification_node(state: DataAgentState, runtime: Runtime[DataAgentContext]):
+    step = "澄清需求"
+    runtime.stream_writer({"type": "progress", "step": step, "status": "running"})
     message = "我暂时无法可靠判断你的需求。请说明是查询数据、查看历史、查看表结构，还是调用某个工具。"
     runtime.stream_writer({"type": "clarification", "data": message})
+    runtime.stream_writer({"type": "progress", "step": step, "status": "success"})
+    logger.info("请求需要澄清")
     return {"response": message}
 
 
 async def refuse_node(state: DataAgentState, runtime: Runtime[DataAgentContext]):
+    step = "拒绝回答"
+    runtime.stream_writer({"type": "progress", "step": step, "status": "running"})
     message = state.get("route_answer") or "抱歉，这个请求超出了当前系统的处理范围。"
     runtime.stream_writer({"type": "result", "data": message})
+    runtime.stream_writer({"type": "progress", "step": step, "status": "success"})
+    logger.info(f"拒绝回答: intent={state.get('intent', '')}")
     return {"response": message}
 
 
@@ -216,6 +244,9 @@ async def tool_call_node(state: DataAgentState, runtime: Runtime[DataAgentContex
     tool_name = state.get("tool_name")
     if not tool_name:
         return await clarification_node(state, runtime)
+    step = "调用工具"
+    runtime.stream_writer({"type": "progress", "step": step, "status": "running"})
+    logger.info(f"开始调用工具: {tool_name}")
     try:
         arguments = dict(state.get("tool_arguments", {}))
         if tool_name == "data.query":
@@ -250,26 +281,42 @@ async def tool_call_node(state: DataAgentState, runtime: Runtime[DataAgentContex
             rows = result.get("rows")
             if isinstance(rows, list):
                 runtime.stream_writer({"type": "result", "data": rows})
+        runtime.stream_writer({"type": "progress", "step": step, "status": "success"})
+        logger.info(f"工具调用完成: {tool_name}")
         return {"response": str(result)}
     except Exception as exc:
+        runtime.stream_writer({"type": "progress", "step": step, "status": "error"})
         runtime.stream_writer({"type": "error", "message": str(exc)})
+        logger.error(f"工具调用失败: tool={tool_name}, error={str(exc)}")
         return {"response": str(exc)}
 
 
 async def chat_node(state: DataAgentState, runtime: Runtime[DataAgentContext]):
+    step = "闲聊回复"
+    runtime.stream_writer({"type": "progress", "step": step, "status": "running"})
     message = state.get("route_answer") or "你好，我可以帮助你查询数据、导出 Excel 或画图。"
     runtime.stream_writer({"type": "result", "data": message})
+    runtime.stream_writer({"type": "progress", "step": step, "status": "success"})
+    logger.info("闲聊回复完成")
     return {"response": message}
 
 
 async def history_query_node(state: DataAgentState, runtime: Runtime[DataAgentContext]):
+    step = "查询历史"
+    runtime.stream_writer({"type": "progress", "step": step, "status": "running"})
     history = state.get("memory", {}).get("working", [])
     message = {"type": "history", "data": history}
     runtime.stream_writer(message)
+    runtime.stream_writer({"type": "progress", "step": step, "status": "success"})
+    logger.info(f"历史查询完成: count={len(history)}")
     return {"response": str(history)}
 
 
 async def security_node(state: DataAgentState, runtime: Runtime[DataAgentContext]):
+    step = "检查权限"
+    runtime.stream_writer({"type": "progress", "step": step, "status": "running"})
     message = f"当前会话角色为 {state.get('role', 'user')}，工具权限由服务端配置控制。"
     runtime.stream_writer({"type": "result", "data": message})
+    runtime.stream_writer({"type": "progress", "step": step, "status": "success"})
+    logger.info(f"权限信息已返回: role={state.get('role', 'user')}")
     return {"response": message}
