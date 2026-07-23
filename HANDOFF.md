@@ -64,6 +64,7 @@
 - 当前后端测试总数为 27 项，前端 `npm run build` 通过。
 - 前端已使用 `sessionStorage` 持久化并回传 `session_id`，同一浏览器会话可正确加载工作记忆；`user_id=anonymous` 仍是未接入认证时的安全默认值。
 - 会话结果保存前会将 `Decimal`、日期时间和嵌套结果转换为 JSON 兼容值，避免查询成功后因记忆 metadata 写入失败而返回错误。
+- 长期记忆保存已统一为 `memory.save` 工具：意图识别负责生成 `content` 和 `memory_type`，ToolRegistry 校验后调用 MemoryRepository；查询服务不再执行正则隐式保存。
 - 导出结果会清理 24 小时前的生成文件；导出最多 10,000 行、生成文件最多 10MB；MCP 图片必须是合法 base64 且解码后不超过 8MB。
 - API 默认忽略客户端传入的 `user_id` 并使用 `anonymous`；仅在显式设置 `DATA_AGENT_TRUSTED_PROXY=true` 时读取可信反向代理的 `X-Authenticated-User`。
 

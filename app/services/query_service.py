@@ -15,7 +15,6 @@ from app.repositories.qdrant.column_qdrant_repository import ColumnQdrantReposit
 from app.repositories.qdrant.metric_qdrant_repository import MetricQdrantRepository
 from app.repositories.mysql.meta.memory_repository import MemoryRepository
 from app.conf.app_config import app_config
-from app.memory import extract_long_term_memories
 
 
 def _json_safe(value):
@@ -74,12 +73,6 @@ class QueryService:
                 user_id=user_id, session_id=session_id, query=query, intent=intent,
                 response=str(summary), metadata_json={"result": safe_result} if safe_result is not None else None,
             )
-            for memory in extract_long_term_memories(query):
-                await self.memory_repository.remember_preference(
-                    user_id=user_id,
-                    memory_type=memory["memory_type"],
-                    content=memory["content"],
-                )
             yield f"data: {json.dumps({'type': 'session', 'session_id': session_id}, ensure_ascii=False)}\n\n"
         except Exception as e:
             error={"type": "error", "message": str(e)}

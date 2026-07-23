@@ -253,6 +253,8 @@ async def tool_call_node(state: DataAgentState, runtime: Runtime[DataAgentContex
             arguments.setdefault("query", state["query"])
             arguments.setdefault("user_id", state.get("user_id", "anonymous"))
             arguments.setdefault("session_id", state.get("session_id", ""))
+        if tool_name == "memory.save":
+            arguments.setdefault("user_id", state.get("user_id", "anonymous"))
         if tool_name in {"result.export_excel", "chart.draw", "export_excel", "draw_treemap"} and "rows" not in arguments:
             latest_result = state.get("memory", {}).get("latest_result")
             if isinstance(latest_result, list):

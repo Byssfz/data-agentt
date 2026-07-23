@@ -138,6 +138,22 @@ def summarize_result(arguments: dict[str, Any]) -> dict[str, Any]:
     return {"type": "summary", "text": "".join(details), "row_count": len(rows), "numeric_totals": numeric_totals}
 
 
+async def save_long_term_memory(arguments: dict[str, Any], *, runtime: Any = None) -> dict[str, Any]:
+    """Persist a memory only when the router explicitly selects this tool."""
+    if runtime is None:
+        raise RuntimeError("Runtime is required for the memory.save tool")
+    content = str(arguments.get("content", "")).strip()
+    if not content:
+        raise ValueError("content must not be empty")
+    memory_type = str(arguments.get("memory_type", "instruction"))
+    await runtime.context["memory_repository"].remember_preference(
+        user_id=str(arguments.get("user_id", "anonymous")),
+        memory_type=memory_type,
+        content=content,
+    )
+    return {"type": "memory", "message": "已保存到长期记忆。", "memory_type": memory_type}
+
+
 def mermaid_treemap(arguments: dict[str, Any]) -> dict[str, Any]:
     rows = _rows(arguments)
     if not rows:

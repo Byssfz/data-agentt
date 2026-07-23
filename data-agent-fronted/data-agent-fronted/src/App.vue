@@ -109,6 +109,7 @@ const toolLabels = {
   "result.export_excel": "导出 Excel",
   "chart.draw": "生成图表",
   "summarize_result": "总结结果",
+  "memory.save": "保存长期记忆",
 };
 
 function toolLabel(tool) {
