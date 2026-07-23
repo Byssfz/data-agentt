@@ -277,10 +277,6 @@ async def tool_call_node(state: DataAgentState, runtime: Runtime[DataAgentContex
             tool_name = repaired.tool_name
 
         runtime.stream_writer({"type": "tool_result", "tool": tool_name, "data": result})
-        if isinstance(result, dict) and result.get("type") == "query_result":
-            rows = result.get("rows")
-            if isinstance(rows, list):
-                runtime.stream_writer({"type": "result", "data": rows})
         runtime.stream_writer({"type": "progress", "step": step, "status": "success"})
         logger.info(f"工具调用完成: {tool_name}")
         return {"response": str(result)}
