@@ -93,6 +93,29 @@ class IntentNodeTests(unittest.TestCase):
         self.assertEqual(result["response"], "{'ok': True}")
         self.assertEqual(registry.execute.await_count, 2)
 
+    def test_query_tool_result_is_reemitted_for_session_persistence(self):
+        events = []
+        registry = SimpleNamespace(
+            execute=AsyncMock(return_value={"type": "query_result", "rows": [{"地区": "华东", "销售额": 10}]}),
+            list=lambda: [],
+        )
+        runtime = SimpleNamespace(
+            context={"tool_registry": registry},
+            stream_writer=events.append,
+        )
+        state = {
+            "query": "查询销售额",
+            "tool_name": "data.query",
+            "tool_arguments": {"query": "查询销售额"},
+            "memory": {},
+            "role": "user",
+        }
+
+        asyncio.run(tool_call_node(state, runtime))
+
+        self.assertEqual(events[0]["type"], "tool_result")
+        self.assertEqual(events[1], {"type": "result", "data": [{"地区": "华东", "销售额": 10}]})
+
 
 if __name__ == "__main__":
     unittest.main()

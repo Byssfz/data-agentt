@@ -246,6 +246,10 @@ async def tool_call_node(state: DataAgentState, runtime: Runtime[DataAgentContex
             tool_name = repaired.tool_name
 
         runtime.stream_writer({"type": "tool_result", "tool": tool_name, "data": result})
+        if isinstance(result, dict) and result.get("type") == "query_result":
+            rows = result.get("rows")
+            if isinstance(rows, list):
+                runtime.stream_writer({"type": "result", "data": rows})
         return {"response": str(result)}
     except Exception as exc:
         runtime.stream_writer({"type": "error", "message": str(exc)})
