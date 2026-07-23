@@ -26,6 +26,11 @@ class IntentDecision(BaseModel):
     source: str = "rule"
 
 
+class ToolCallDecision(BaseModel):
+    tool_name: str
+    arguments: dict = Field(default_factory=dict)
+
+
 def _as_model(decision: RuleDecision) -> IntentDecision:
     return IntentDecision(
         intent=decision.intent,
@@ -109,6 +114,48 @@ async def _llm_fallback(state: DataAgentState, rule_decision: IntentDecision, to
     )
 
 
+async def _repair_tool_call(state: DataAgentState, tool_name: str, arguments: dict,
+                            error: str, tool_registry) -> ToolCallDecision:
+    tool_list = "\n".join(
+        f"- {tool.name}: {tool.description}; schema={json.dumps(tool.input_schema, ensure_ascii=False)}"
+        for tool in tool_registry.list()
+    )
+    prompt = f"""你是工具参数修正器。原路由已经选择了工具，但服务端校验失败。
+
+当前问题：
+{state['query']}
+
+会话和长期记忆：
+{_memory_prompt(state)}
+
+原工具：{tool_name}
+原参数：{json.dumps(arguments, ensure_ascii=False, default=str)}
+校验错误：{error}
+
+可用工具：
+{tool_list}
+
+只返回合法 JSON，必须包含 tool_name 和 arguments。只能选择可用工具，并严格遵守工具 schema。不要解释原因。
+"""
+    methods = [app_config.intent.structured_output_method]
+    if "json_mode" not in methods:
+        methods.append("json_mode")
+    errors: list[str] = []
+    for method in methods:
+        try:
+            try:
+                structured_llm = llm.with_structured_output(ToolCallDecision, method=method)
+            except TypeError:
+                structured_llm = llm.with_structured_output(ToolCallDecision)
+            decision = await structured_llm.ainvoke(prompt)
+            if isinstance(decision, ToolCallDecision):
+                return decision
+            return ToolCallDecision.model_validate(decision)
+        except Exception as exc:
+            errors.append(f"{method}: {exc}")
+    raise ValueError("工具参数自动修正失败：" + "；".join(errors))
+
+
 async def intent_recognition(state: DataAgentState, runtime: Runtime[DataAgentContext]):
     rule_decision = _as_model(classify_with_rules(state["query"]))
     # Rules are only a cheap hint now. The LLM owns the final intent, tool,
@@ -179,11 +226,25 @@ async def tool_call_node(state: DataAgentState, runtime: Runtime[DataAgentContex
             latest_result = state.get("memory", {}).get("latest_result")
             if isinstance(latest_result, list):
                 arguments["rows"] = latest_result
-        result = await runtime.context["tool_registry"].execute(
-            tool_name, arguments,
-            role=state.get("role", "user"), intent="tool_call",
-            runtime=runtime,
-        )
+        try:
+            result = await runtime.context["tool_registry"].execute(
+                tool_name, arguments,
+                role=state.get("role", "user"), intent="tool_call",
+                runtime=runtime,
+            )
+        except (KeyError, ValueError) as exc:
+            if state.get("tool_retry_count", 0) >= 1:
+                raise
+            repaired = await _repair_tool_call(
+                state, tool_name, arguments, str(exc), runtime.context["tool_registry"]
+            )
+            result = await runtime.context["tool_registry"].execute(
+                repaired.tool_name, repaired.arguments,
+                role=state.get("role", "user"), intent="tool_call",
+                runtime=runtime,
+            )
+            tool_name = repaired.tool_name
+
         runtime.stream_writer({"type": "tool_result", "tool": tool_name, "data": result})
         return {"response": str(result)}
     except Exception as exc:

@@ -3,7 +3,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from app.agent.nodes.intent import IntentDecision, intent_recognition
+from app.agent.nodes.intent import IntentDecision, intent_recognition, tool_call_node
 
 
 class IntentNodeTests(unittest.TestCase):
@@ -66,6 +66,32 @@ class IntentNodeTests(unittest.TestCase):
 
         self.assertEqual(result["route"], "refuse")
         self.assertEqual(result["tool_name"], "")
+
+    def test_tool_call_repairs_invalid_arguments_once(self):
+        registry = SimpleNamespace(
+            execute=AsyncMock(side_effect=[ValueError("missing query"), {"ok": True}]),
+            list=lambda: [],
+        )
+        runtime = SimpleNamespace(
+            context={"tool_registry": registry},
+            stream_writer=lambda _: None,
+        )
+        state = {
+            "query": "查询销售额",
+            "tool_name": "data.query",
+            "tool_arguments": {},
+            "memory": {},
+            "role": "user",
+            "tool_retry_count": 0,
+        }
+        repaired = SimpleNamespace(tool_name="data.query", arguments={"query": "查询销售额"})
+
+        with patch("app.agent.nodes.intent._repair_tool_call", new=AsyncMock(return_value=repaired)) as repair:
+            result = asyncio.run(tool_call_node(state, runtime))
+
+        repair.assert_awaited_once()
+        self.assertEqual(result["response"], "{'ok': True}")
+        self.assertEqual(registry.execute.await_count, 2)
 
 
 if __name__ == "__main__":

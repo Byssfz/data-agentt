@@ -46,6 +46,7 @@ class DataAgentState(TypedDict, total=False):
     route_answer: str
     tool_name: str
     tool_arguments: dict[str, Any]
+    tool_retry_count: int
     error: str | None
     intent: str
     intent_confidence: float
