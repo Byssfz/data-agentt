@@ -1,5 +1,7 @@
 import json
 import uuid
+from datetime import date, datetime
+from decimal import Decimal
 
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 
@@ -14,6 +16,19 @@ from app.repositories.qdrant.metric_qdrant_repository import MetricQdrantReposit
 from app.repositories.mysql.meta.memory_repository import MemoryRepository
 from app.conf.app_config import app_config
 from app.memory import extract_long_term_memories
+
+
+def _json_safe(value):
+    """Convert database result values into MySQL JSON-compatible values."""
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 class QueryService:
@@ -54,9 +69,10 @@ class QueryService:
             intent = next((item.get("intent", "unknown") for item in chunks if item.get("type") == "intent"), "unknown")
             summary = next((item.get("data", "") for item in reversed(chunks) if item.get("type") == "result"), "")
             result = next((item.get("data") for item in reversed(chunks) if item.get("type") == "result" and isinstance(item.get("data"), list)), None)
+            safe_result = _json_safe(result)
             await self.memory_repository.save_turn(
                 user_id=user_id, session_id=session_id, query=query, intent=intent,
-                response=str(summary), metadata_json={"result": result} if result is not None else None,
+                response=str(summary), metadata_json={"result": safe_result} if safe_result is not None else None,
             )
             for memory in extract_long_term_memories(query):
                 await self.memory_repository.remember_preference(
