@@ -55,6 +55,8 @@
 - 工具调用校验失败现在最多触发一次 LLM 参数修正；修正后的工具名和参数仍会重新经过 ToolRegistry 校验。
 - `data.query` 的 `query_result.rows` 会额外以 `result` 事件发出，保证 QueryService 能保存结果供下一轮导出或绘图使用。
 - 新增统一工具目录测试，确认 `data.query`、`result.export_excel`、`chart.draw` 均已注册；当前测试总数为 20 项。
+- 真实 `GET /api/tools` 返回 200，命名空间工具和已发现的 Mermaid MCP 工具均可见。
+- 真实 `POST /api/query` 闲聊冒烟通过：SSE 返回 `route=chat`、模型回答和 session 事件。
 
 ## 还剩什么
 
