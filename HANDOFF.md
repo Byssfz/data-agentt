@@ -58,6 +58,9 @@
 - 真实 `GET /api/tools` 返回 200，命名空间工具和已发现的 Mermaid MCP 工具均可见。
 - 真实 `POST /api/query` 闲聊冒烟通过：SSE 返回 `route=chat`、模型回答和 session 事件。
 - 真实跨轮次 E2E 通过：同一会话先调用 `data.query` 返回 5 行地区销售数据，随后调用 `result.export_excel` 返回 XLSX 下载地址，再调用 `chart.draw` 返回 Mermaid PNG 图片。
+- 记忆加载、意图识别、工具调用、闲聊、拒答、澄清、历史和权限节点现在统一输出 `progress(running/success/error)`，并使用现有 `logger` 记录节点开始、完成和失败信息。
+- 前端沿用原有 steps 容器，新增意图决策、文本 result、clarification 和 history 事件展示；真实 8002 SSE 冒烟已验证“加载记忆 → 意图识别 → 闲聊回复”的完整顺序。
+- 当前后端测试总数为 27 项，前端 `npm run build` 通过。
 - 导出结果会清理 24 小时前的生成文件；导出最多 10,000 行、生成文件最多 10MB；MCP 图片必须是合法 base64 且解码后不超过 8MB。
 - API 默认忽略客户端传入的 `user_id` 并使用 `anonymous`；仅在显式设置 `DATA_AGENT_TRUSTED_PROXY=true` 时读取可信反向代理的 `X-Authenticated-User`。
 
@@ -145,4 +148,4 @@ Invoke-WebRequest http://127.0.0.1:8000/api/tools
 
 ## 下次继续的第一步
 
-下一步处理导出文件生命周期、图片大小限制和认证/敏感数据安全。
+下一步继续补充数据查询、工具调用和拒答分支的真实前端进度验收，并处理 8000 旧后端进程无法回收的问题。
