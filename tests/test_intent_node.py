@@ -93,6 +93,14 @@ class IntentNodeTests(unittest.TestCase):
         self.assertEqual(result["route"], "tool_call")
         self.assertEqual(result["route_answer"], "")
 
+    def test_route_accepts_model_output_without_confidence(self):
+        decision = IntentDecision.model_validate({
+            "route": "chat",
+            "answer": "你好！",
+        })
+
+        self.assertEqual(decision.confidence, 0.0)
+
     def test_refuse_route_does_not_select_a_tool(self):
         llm_decision = IntentDecision(
             route="refuse",

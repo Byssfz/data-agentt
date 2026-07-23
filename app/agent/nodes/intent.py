@@ -20,7 +20,7 @@ class IntentDecision(BaseModel):
     arguments: dict = Field(default_factory=dict)
     answer: str | None = None
     intent: str = "tool_call"
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     reason: str = ""
     alternatives: list[dict] = Field(default_factory=list)
     entities: dict = Field(default_factory=dict)
