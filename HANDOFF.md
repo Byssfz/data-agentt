@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-系统侧的工具注册、意图路由、分库记忆、SQL 查询、结果后处理和 MCP 图片结果链路已经完成；官方 Mermaid MCP Server 已配置并完成真实树状图渲染验证。Mermaid 原始长文本已压缩为图片、简短状态和可选预览链接。下一次对话应从参数校验、MCP 容错和生产化安全继续。
+系统已确定采用“统一 LLM 路由 + 统一 ToolRegistry 执行”的简化架构：路由节点只输出 `tool_call`、`chat` 或 `refuse`，工具调用直接携带 `tool_name + arguments`；ToolRegistry 负责校验并执行 Python 函数、LangGraph 工作流或 MCP 工具。路由上下文包含当前会话历史和用户全部长期记忆。当前开始把代码从旧的 `intent + entities` 契约收敛到该新契约。
 
 ## 已完成什么
 
@@ -21,18 +21,43 @@
 - 已兼容 `mcp==1.28.1` 的 Streamable HTTP 三元组返回值，工具发现验证通过。
 - DeepSeek 意图路由已切换为 `json_mode`，Prompt 明确要求 JSON，并保留 `function_calling → json_mode` fallback；真实模糊请求验证通过。
 - SQL 子图结果已回流到主图，新增结果后处理节点，可根据原始请求自动触发摘要、Excel 导出和 Mermaid 树状图。
-- 新增本地工具 `summarize_result`、`export_excel`、`chart.to_mermaid_treemap`；Excel 通过 `/api/exports/{filename}` 下载。
+- 新增本地工具 `summarize_result`、`export_excel`、`draw_treemap`；Excel 通过 `/api/exports/{filename}` 下载，`draw_treemap` 内部组合 Mermaid 代码生成与 Mermaid MCP 渲染。
 - 官方 Mermaid treemap 已改用 `treemap-beta` 语法；真实请求“统计各个地区的销售额并导出树状图”已返回 5 个地区结果和 PNG 图片。
 - 真实组合请求“统计各个地区的销售额，并总结结果、导出 Excel 和树状图”已验证：SQL 结果、摘要、合法 XLSX 和 Mermaid PNG 均通过 SSE 返回。
 - 前端已增加 `tool_result` 的摘要、文件下载和 base64 图片渲染。
 - Mermaid MCP 的冗长原始文本、完整代码和提示词不再直接展示给用户；后端仅返回“树状图已生成”、图片和可选预览链接。
 - `.venv` 已通过 `uv sync` 安装 `mcp==1.28.1`；当前 10 项测试全部通过，编译检查通过。
+- `ToolRegistry` 已使用 JSON Schema 在注册时校验 schema、执行时校验 arguments；缺少必填参数、类型错误和额外字段会在 handler 执行前失败。
+- MCP server 注册已按 server 隔离异常；单个 server 连接、初始化或工具发现失败时记录错误并继续启动其他 MCP server。
+- 已删除 `post_process_result` 节点和查询完成后的自动后处理连线；查询结果通过 `conversation_message.metadata_json.result` 保存，后续独立工具调用可读取上一轮结构化结果并补齐 `rows` 参数。
+- `data.query` 已从占位工具改为真正执行 SQL 子图的统一工具；`text_to_sql` 和 `schema_query` 意图现在都会进入 `tool_call`，由工具注册表调用 `data.query`。
+- 意图识别已改为每轮都调用结构化 LLM；规则分类只作为 Prompt 参考，不再因规则置信度达标而跳过 LLM。LLM 统一决定意图、工具名和工具参数，服务端只补充会话身份及上一轮结果上下文。
+
+## 本轮已确认的架构基线
+
+- 路由输出固定为三类：`tool_call`、`chat`、`refuse`。
+- `tool_call` 由 LLM 直接输出命名空间工具名和参数；服务端不再增加独立的参数规划层。
+- `ToolRegistry` 在注册时准备函数、LangGraph 或 MCP 的执行适配；路由层不关心工具实现类型。
+- 当前工具范围优先收敛为 `data.query`、`result.export_excel`、`chart.draw`。
+- `data.query` 接收自然语言查询参数，SQL 生成、校验和执行继续由已有 LangGraph 工作流完成。
+- 路由 LLM 输入当前请求、会话历史和全部长期记忆；工具结果应以会话历史中的结构化消息继续支持后续请求。
+- 工具名或参数校验失败最多自动修正一次；仍失败则澄清或返回错误。
+- 不支持或高风险请求由 `refuse` 分支直接结束，不进入工具执行。
+
+## 本轮已完成
+
+- `IntentDecision` 增加固定的 `tool_call`、`chat`、`refuse` 路由契约。
+- `tool_call` 直接输出 `tool_name + arguments`，并写入主图 State 后交给 ToolRegistry。
+- 主图增加独立 `refuse` 节点；聊天回复使用路由模型返回的 `answer`。
+- Excel 和绘图注册为 `result.export_excel`、`chart.draw` 命名空间工具；`data.query` 继续调用已有 SQL LangGraph。
+- 保持现有 ToolRegistry 的 JSON Schema、权限和 MCP 能力，不重做已经验证的底层工具链。
+- 新增 chat/refuse 路由测试；`.venv` 中没有 pytest，因此使用 `unittest discover` 验证 17 项测试，并通过 compileall。
 
 ## 还剩什么
 
-### P0：下一次优先完成
+### P0：下一步优先完成
 
-- 为工具输入增加 JSON Schema 校验；当前 `ToolRegistry` 只做权限检查，没有校验 LLM 生成的参数。
+- 为工具参数校验失败增加一次受控的路由自动修正，再失败时澄清或返回错误。
 - 完善 MCP 启动容错：单个 MCP server 连接失败时不应阻塞整个应用启动，应记录错误并让其他工具继续可用。
 - 解决真实 MCP 工具的会话复用、断线重连和健康状态；当前每次调用都会重新建立 MCP session。
 - 将结果后处理从关键词触发升级为明确的结果动作意图，避免“图/导出/总结”关键词误触发。
@@ -67,7 +92,7 @@
 - 意图规则：[app/core/intent.py](app/core/intent.py)
 - 意图与 LLM fallback：[app/agent/nodes/intent.py](app/agent/nodes/intent.py)
 - 主图/SQL 子图：[app/agent/graph.py](app/agent/graph.py)
-- 结果后处理：[app/agent/nodes/post_process_result.py](app/agent/nodes/post_process_result.py)
+- 结果工具：[app/tools/builtin.py](app/tools/builtin.py)
 - 工具注册与权限：[app/tools/registry.py](app/tools/registry.py)
 - 本地结果工具：[app/tools/builtin.py](app/tools/builtin.py)
 - MCP 适配：[app/tools/mcp.py](app/tools/mcp.py)
@@ -112,4 +137,4 @@ Invoke-WebRequest http://127.0.0.1:8000/api/tools
 
 ## 下次继续的第一步
 
-下一步先补齐工具参数 JSON Schema 校验和 MCP 启动容错，再为“查询结果后处理”增加正式集成测试；之后处理导出文件生命周期、图片大小限制和认证/敏感数据安全。
+下一步为参数校验失败增加一次受控自动修正，并补跨轮次 `tool_call`（查询后导出、查询后绘图）的集成测试；之后处理导出文件生命周期、图片大小限制和认证/敏感数据安全。

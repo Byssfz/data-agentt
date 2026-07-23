@@ -53,8 +53,10 @@ class QueryService:
                 yield f"data: {json.dumps(chunk, ensure_ascii=False,default=str)}\n\n"
             intent = next((item.get("intent", "unknown") for item in chunks if item.get("type") == "intent"), "unknown")
             summary = next((item.get("data", "") for item in reversed(chunks) if item.get("type") == "result"), "")
+            result = next((item.get("data") for item in reversed(chunks) if item.get("type") == "result" and isinstance(item.get("data"), list)), None)
             await self.memory_repository.save_turn(
-                user_id=user_id, session_id=session_id, query=query, intent=intent, response=str(summary)
+                user_id=user_id, session_id=session_id, query=query, intent=intent,
+                response=str(summary), metadata_json={"result": result} if result is not None else None,
             )
             for memory in extract_long_term_memories(query):
                 await self.memory_repository.remember_preference(

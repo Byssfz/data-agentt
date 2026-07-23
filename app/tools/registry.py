@@ -5,6 +5,8 @@ import inspect
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from jsonschema import Draft202012Validator, SchemaError
+
 
 ToolCallable = Callable
 
@@ -30,6 +32,10 @@ class ToolRegistry:
     def register(self, tool: ToolDefinition) -> ToolDefinition:
         if not tool.name or tool.name in self._tools:
             raise ValueError(f"Tool already registered or unnamed: {tool.name!r}")
+        try:
+            Draft202012Validator.check_schema(tool.input_schema or {})
+        except SchemaError as exc:
+            raise ValueError(f"Invalid input schema for tool {tool.name!r}: {exc.message}") from exc
         self._tools[tool.name] = tool
         return tool
 
@@ -59,14 +65,34 @@ class ToolRegistry:
             raise PermissionError(f"Mutating tool {name!r} requires explicit confirmation")
         return tool
 
-    async def execute(self, name: str, arguments: dict[str, Any], *, role: str, intent: str) -> Any:
+    async def execute(self, name: str, arguments: dict[str, Any], *, role: str, intent: str,
+                      runtime: Any = None) -> Any:
         tool = self.authorize(name, role=role, intent=intent)
+        self.validate_arguments(tool, arguments)
         if tool.handler is None:
             raise RuntimeError(f"Tool {name!r} has no handler")
-        result = tool.handler(arguments)
+        parameters = inspect.signature(tool.handler).parameters
+        handler_kwargs = {
+            key: value for key, value in {
+                "role": role, "intent": intent, "registry": self, "runtime": runtime,
+            }.items() if key in parameters
+        }
+        result = tool.handler(arguments, **handler_kwargs)
         if inspect.isawaitable(result):
             return await asyncio.wait_for(result, timeout=tool.timeout_seconds)
         return result
+
+    @staticmethod
+    def validate_arguments(tool: ToolDefinition, arguments: dict[str, Any]) -> None:
+        if not isinstance(arguments, dict):
+            raise ValueError(f"Arguments for tool {tool.name!r} must be an object")
+        validator = Draft202012Validator(tool.input_schema or {})
+        error = next(iter(validator.iter_errors(arguments)), None)
+        if error is None:
+            return
+        location = ".".join(str(part) for part in error.absolute_path)
+        suffix = f" at {location}" if location else ""
+        raise ValueError(f"Invalid arguments for tool {tool.name!r}{suffix}: {error.message}")
 
 
 def register_graph_tool(registry: ToolRegistry, *, name: str, description: str, graph: Any, **kwargs: Any) -> None:

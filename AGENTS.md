@@ -40,3 +40,15 @@ Existing commits are short and descriptive, including Chinese messages. Keep com
 ## Security & Configuration Tips
 
 Review `conf/app_config.yaml` and `conf/meta_config.yaml` before running locally. Keep secrets in ignored `.env` or local configuration, never in commits. Treat generated SQL and database credentials as sensitive, and verify Docker-exposed ports before sharing a development environment.
+
+## Current Routing Architecture
+
+The application uses one structured LLM routing node. Its output is a discriminated route:
+
+- `tool_call`: includes `tool_name` and structured `arguments`.
+- `chat`: includes the direct answer for the conversation model path.
+- `refuse`: includes the refusal answer; no tool may execute.
+
+The router receives the current input, conversation history, and the user's long-term memory. It may select only registered, namespaced tools. `ToolRegistry` validates the selected tool, role/intent policy, and JSON Schema arguments before execution. A registered tool may be a Python function, a LangGraph workflow, or an MCP adapter; the router does not depend on the implementation type. The initial supported tools are `data.query`, `result.export_excel`, and `chart.draw` (with compatibility aliases allowed only while existing callers are migrated).
+
+Keep the first implementation intentionally small: tool registration owns the argument-to-handler/workflow adaptation, `data.query` owns the SQL LangGraph workflow, and the router owns route selection and argument generation. On tool-name or argument validation failure, allow at most one structured correction attempt, then return clarification or an error. Unsupported or high-risk requests are handled as `refuse` before execution.

@@ -42,6 +42,10 @@ class DataAgentState(TypedDict, total=False):
     user_id: str
     session_id: str
     role: str
+    route: str
+    route_answer: str
+    tool_name: str
+    tool_arguments: dict[str, Any]
     error: str | None
     intent: str
     intent_confidence: float

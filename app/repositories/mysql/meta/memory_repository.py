@@ -36,12 +36,14 @@ class MemoryRepository:
         await self.session.commit()
         return item
 
-    async def save_turn(self, *, user_id: str, session_id: str, query: str, intent: str, response: str) -> None:
+    async def save_turn(self, *, user_id: str, session_id: str, query: str, intent: str, response: str,
+                        metadata_json: dict | None = None) -> None:
         self.session.add(ConversationMessage(
             user_id=user_id, session_id=session_id, role="user", content=query, intent=intent
         ))
         self.session.add(ConversationMessage(
-            user_id=user_id, session_id=session_id, role="assistant", content=response, intent=intent
+            user_id=user_id, session_id=session_id, role="assistant", content=response, intent=intent,
+            metadata_json=metadata_json,
         ))
         await self.session.commit()
 

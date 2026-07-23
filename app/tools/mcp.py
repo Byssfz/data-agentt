@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from loguru import logger
+
 from app.tools.registry import ToolDefinition, ToolRegistry
 
 
@@ -83,23 +85,27 @@ async def register_mcp_servers(registry: ToolRegistry, servers: list[dict[str, A
         raise RuntimeError("MCP servers are configured but the optional 'mcp' package is not installed") from exc
 
     for config in servers:
-        async with _transport(config) as transport_result:
-            read_stream, write_stream = _streams(transport_result)
-            async with ClientSession(read_stream, write_stream) as session:
-                await session.initialize()
-                result = await session.list_tools()
-                allowed = set(config.get("tools", []))
-                for remote_tool in result.tools:
-                    if allowed and remote_tool.name not in allowed:
-                        continue
-                    registry.register(ToolDefinition(
-                        name=f"{config.get('name', 'mcp')}.{remote_tool.name}",
-                        description=remote_tool.description or remote_tool.name,
-                        handler=lambda args, c=config, n=remote_tool.name: _call(c, n, args),
-                        input_schema=remote_tool.inputSchema or {},
-                        kind="mcp",
-                        read_only=bool(config.get("read_only", True)),
-                        allowed_roles=set(config.get("allowed_roles", ["admin"])),
-                        allowed_intents=set(config.get("allowed_intents", [])),
-                        timeout_seconds=float(config.get("timeout_seconds", 60)),
-                    ))
+        server_name = str(config.get("name", "mcp"))
+        try:
+            async with _transport(config) as transport_result:
+                read_stream, write_stream = _streams(transport_result)
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    result = await session.list_tools()
+                    allowed = set(config.get("tools", []))
+                    for remote_tool in result.tools:
+                        if allowed and remote_tool.name not in allowed:
+                            continue
+                        registry.register(ToolDefinition(
+                            name=f"{server_name}.{remote_tool.name}",
+                            description=remote_tool.description or remote_tool.name,
+                            handler=lambda args, c=config, n=remote_tool.name: _call(c, n, args),
+                            input_schema=remote_tool.inputSchema or {},
+                            kind="mcp",
+                            read_only=bool(config.get("read_only", True)),
+                            allowed_roles=set(config.get("allowed_roles", ["admin"])),
+                            allowed_intents=set(config.get("allowed_intents", [])),
+                            timeout_seconds=float(config.get("timeout_seconds", 60)),
+                        ))
+        except Exception:
+            logger.exception("MCP server '{}' failed during startup; continuing without its tools", server_name)

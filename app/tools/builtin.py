@@ -130,3 +130,39 @@ def mermaid_treemap(arguments: dict[str, Any]) -> dict[str, Any]:
     for row in rows:
         lines.append(f'    "{safe(row.get(label_column, "未命名"))}": {row.get(value_column, 0)}')
     return {"mermaid_code": "\n".join(lines), "label_column": label_column, "value_column": value_column}
+
+
+async def draw_treemap(arguments: dict[str, Any], *, role: str = "user", registry: Any = None) -> dict[str, Any]:
+    """Build and render a treemap through the configured Mermaid MCP tool."""
+    if registry is None:
+        raise RuntimeError("Tool registry is required for treemap rendering")
+    chart_input = mermaid_treemap(arguments)
+    mcp_name = "mermaid.validate_and_render_mermaid_diagram"
+    if mcp_name not in {tool.name for tool in registry.list()}:
+        raise RuntimeError("Mermaid MCP 工具尚未连接，无法渲染树状图")
+    rendered = await registry.execute(
+        mcp_name,
+        {
+            "prompt": "请渲染各地区销售额树状图",
+            "mermaidCode": chart_input["mermaid_code"],
+            "diagramType": "treemap",
+            "clientName": "data-agentt",
+            "useUrlShortener": False,
+        },
+        role=role,
+        intent="tool_call",
+    )
+    content = rendered.get("content", [])
+    images = [item for item in content if item.get("type") == "image"]
+    text = "\n".join(item.get("text", "") for item in content if item.get("type") == "text")
+    preview_match = re.search(r"https://mermaid\.ai/live/edit\?[^\s)]+", text)
+    if images:
+        image = images[0]
+        return {
+            "type": "image",
+            "message": "树状图已生成",
+            "mime_type": image.get("mime_type", "image/png"),
+            "data": image.get("data", ""),
+            "preview_url": preview_match.group(0) if preview_match else None,
+        }
+    return {"type": "text", "message": "树状图生成失败", "detail": text[:500]}
